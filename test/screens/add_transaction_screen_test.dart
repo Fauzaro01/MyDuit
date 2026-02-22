@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:myduit/config/app_theme.dart';
 import 'package:myduit/providers/transaction_provider.dart';
 import 'package:myduit/providers/theme_provider.dart';
+import 'package:myduit/providers/wallet_provider.dart';
 import 'package:myduit/screens/add_transaction_screen.dart';
 import 'package:myduit/models/transaction_model.dart';
 
@@ -24,6 +25,7 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => TransactionProvider()),
+        ChangeNotifierProvider(create: (_) => WalletProvider()),
       ],
       child: MaterialApp(
         theme: AppTheme.lightTheme(),
@@ -36,6 +38,11 @@ void main() {
   }
 
   group('AddTransactionScreen', () {
+    // Helper to drain WalletProvider pending DB timers at end of each test
+    Future<void> drainTimers(WidgetTester tester) async {
+      await tester.pump(const Duration(seconds: 11));
+    }
+
     testWidgets('shows "Tambah Transaksi" title for new transaction', (
       tester,
     ) async {
@@ -43,6 +50,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Tambah Transaksi'), findsOneWidget);
+      await drainTimers(tester);
     });
 
     testWidgets('shows "Edit Transaksi" title when editing', (tester) async {
@@ -59,6 +67,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Edit Transaksi'), findsOneWidget);
+      await drainTimers(tester);
     });
 
     testWidgets('pre-fills fields in edit mode', (tester) async {
@@ -84,6 +93,7 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(find.text('Test note'), findsOneWidget);
+      await drainTimers(tester);
     });
 
     testWidgets('shows income/expense type toggle', (tester) async {
@@ -92,6 +102,7 @@ void main() {
 
       expect(find.text('Pemasukan'), findsOneWidget);
       expect(find.text('Pengeluaran'), findsOneWidget);
+      await drainTimers(tester);
     });
 
     testWidgets('shows income categories when income is selected', (
@@ -102,6 +113,7 @@ void main() {
 
       // Should show income categories
       expect(find.text('Gaji'), findsWidgets);
+      await drainTimers(tester);
     });
 
     testWidgets('shows expense categories when expense is selected', (
@@ -112,6 +124,7 @@ void main() {
 
       // Should show expense categories
       expect(find.text('Makanan'), findsWidgets);
+      await drainTimers(tester);
     });
 
     testWidgets('shows form fields', (tester) async {
@@ -120,6 +133,7 @@ void main() {
 
       // Should have text fields for title, amount, note
       expect(find.byType(TextFormField), findsWidgets);
+      await drainTimers(tester);
     });
 
     testWidgets('shows save button', (tester) async {
@@ -138,6 +152,7 @@ void main() {
         find.widgetWithText(ElevatedButton, 'Tambah Transaksi'),
         findsOneWidget,
       );
+      await drainTimers(tester);
     });
 
     testWidgets('shows update button in edit mode', (tester) async {
@@ -160,6 +175,7 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(find.text('Simpan Perubahan'), findsOneWidget);
+      await drainTimers(tester);
     });
 
     testWidgets('has validator on title field', (tester) async {
@@ -172,6 +188,7 @@ void main() {
 
       // Verify the form has validators by checking that Form is present
       expect(find.byType(Form), findsOneWidget);
+      await drainTimers(tester);
     });
 
     testWidgets('has validator on amount field', (tester) async {
@@ -183,6 +200,7 @@ void main() {
 
       // Verify the form exists for validation support
       expect(find.byType(Form), findsOneWidget);
+      await drainTimers(tester);
     });
 
     testWidgets('switching type toggles category list', (tester) async {
@@ -198,6 +216,7 @@ void main() {
 
       // Should now see expense categories
       expect(find.text('Makanan'), findsWidgets);
+      await drainTimers(tester);
     });
   });
 }

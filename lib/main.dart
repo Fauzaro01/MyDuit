@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'config/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'providers/transaction_provider.dart';
+import 'providers/wallet_provider.dart';
 import 'screens/main_navigation.dart';
 import 'screens/splash_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -16,11 +17,16 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final onboardingComplete = prefs.getBool('onboarding_complete') ?? false;
 
+  final walletProvider = WalletProvider();
+  final transactionProvider = TransactionProvider();
+  transactionProvider.setWalletProvider(walletProvider);
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => TransactionProvider()),
+        ChangeNotifierProvider.value(value: walletProvider),
+        ChangeNotifierProvider.value(value: transactionProvider),
       ],
       child: MyDuitApp(showOnboarding: !onboardingComplete),
     ),

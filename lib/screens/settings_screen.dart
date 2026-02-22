@@ -6,6 +6,7 @@ import '../providers/theme_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../services/export_service.dart';
 import 'budget_screen.dart';
+import 'wallet_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -31,6 +32,19 @@ class SettingsScreen extends StatelessWidget {
             children: [
               _SettingsTile(
                 icon: Icons.account_balance_wallet_rounded,
+                title: 'Dompet',
+                subtitle: 'Kelola dompet & transfer',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const WalletScreen()),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.pie_chart_outline_rounded,
                 title: 'Anggaran',
                 subtitle: 'Atur batas pengeluaran per kategori',
                 trailing: const Icon(Icons.chevron_right_rounded, size: 22),

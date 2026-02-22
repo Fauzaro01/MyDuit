@@ -3,10 +3,13 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../providers/transaction_provider.dart';
+import '../providers/wallet_provider.dart';
+import '../utils/formatters.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/insights_widget.dart';
 import '../widgets/transaction_detail_sheet.dart';
 import 'add_transaction_screen.dart';
+import 'wallet_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -50,6 +53,9 @@ class HomeScreen extends StatelessWidget {
                       .slideX(begin: -0.05, end: 0),
                   const SizedBox(height: 20),
                   const MonthSelector(),
+                  const SizedBox(height: 16),
+                  // Wallet quick access
+                  _WalletChipBar(),
                   const SizedBox(height: 20),
                   const BalanceCard(),
                   const SizedBox(height: 28),
@@ -201,6 +207,125 @@ class _QuickActionButton extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WalletChipBar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final walletProvider = context.watch<WalletProvider>();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    if (walletProvider.wallets.isEmpty) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 42,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          // "All wallets" chip
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: _WalletChip(
+              emoji: '🏦',
+              label: 'Semua',
+              isSelected: walletProvider.showAllWallets,
+              color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+              isDark: isDark,
+              onTap: () => walletProvider.showAll(),
+            ),
+          ),
+          ...walletProvider.wallets.map((wallet) {
+            final isSelected =
+                !walletProvider.showAllWallets &&
+                walletProvider.activeWallet?.id == wallet.id;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _WalletChip(
+                emoji: wallet.emoji,
+                label: wallet.name,
+                isSelected: isSelected,
+                color: Color(wallet.colorValue),
+                isDark: isDark,
+                onTap: () => walletProvider.setActiveWallet(wallet),
+              ),
+            );
+          }),
+          // Manage wallets
+          _WalletChip(
+            emoji: '⚙️',
+            label: 'Kelola',
+            isSelected: false,
+            color: isDark
+                ? AppColors.textSecondaryDark
+                : AppColors.textSecondaryLight,
+            isDark: isDark,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const WalletScreen()),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WalletChip extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final bool isSelected;
+  final Color color;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _WalletChip({
+    required this.emoji,
+    required this.label,
+    required this.isSelected,
+    required this.color,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? color.withValues(alpha: 0.15)
+              : (isDark ? AppColors.cardDark : AppColors.cardAltLight),
+          borderRadius: BorderRadius.circular(20),
+          border: isSelected ? Border.all(color: color, width: 1.5) : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected
+                    ? color
+                    : (isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight),
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                fontSize: 13,
+              ),
+            ),
+          ],
         ),
       ),
     );

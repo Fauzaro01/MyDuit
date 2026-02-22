@@ -102,6 +102,7 @@ class TransactionModel {
   final TransactionCategory category;
   final DateTime date;
   final String? note;
+  final String? walletId;
 
   TransactionModel({
     String? id,
@@ -111,6 +112,7 @@ class TransactionModel {
     required this.category,
     required this.date,
     this.note,
+    this.walletId,
   }) : id = id ?? const Uuid().v4();
 
   Map<String, dynamic> toMap() {
@@ -122,6 +124,7 @@ class TransactionModel {
       'category': category.index,
       'date': date.millisecondsSinceEpoch,
       'note': note,
+      'walletId': walletId,
     };
   }
 
@@ -134,6 +137,7 @@ class TransactionModel {
       category: TransactionCategory.values[map['category'] as int],
       date: DateTime.fromMillisecondsSinceEpoch(map['date'] as int),
       note: map['note'] as String?,
+      walletId: map['walletId'] as String?,
     );
   }
 
@@ -145,6 +149,7 @@ class TransactionModel {
     TransactionCategory? category,
     DateTime? date,
     String? note,
+    String? walletId,
   }) {
     return TransactionModel(
       id: id ?? this.id,
@@ -154,6 +159,7 @@ class TransactionModel {
       category: category ?? this.category,
       date: date ?? this.date,
       note: note ?? this.note,
+      walletId: walletId ?? this.walletId,
     );
   }
 }

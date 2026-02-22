@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../models/transaction_model.dart';
+import '../models/wallet_model.dart';
 import '../providers/transaction_provider.dart';
+import '../providers/wallet_provider.dart';
 import '../utils/formatters.dart';
 
 class AddTransactionScreen extends StatefulWidget {
@@ -30,6 +32,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   late TransactionCategory _category;
   late DateTime _date;
   bool _isEditing = false;
+  WalletModel? _selectedWallet;
 
   @override
   void initState() {
@@ -52,6 +55,22 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           : TransactionCategory.food;
       _date = DateTime.now();
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final walletProvider = context.read<WalletProvider>();
+      setState(() {
+        if (_isEditing && widget.transaction!.walletId != null) {
+          _selectedWallet = walletProvider.getWalletById(
+            widget.transaction!.walletId!,
+          );
+        }
+        _selectedWallet ??=
+            walletProvider.activeWallet ??
+            (walletProvider.wallets.isNotEmpty
+                ? walletProvider.wallets.first
+                : null);
+      });
+    });
   }
 
   @override
@@ -242,6 +261,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ),
             const SizedBox(height: 20),
 
+            // Wallet selector
+            Text('Dompet', style: theme.textTheme.labelLarge),
+            const SizedBox(height: 8),
+            _buildWalletSelector(context, isDark),
+            const SizedBox(height: 20),
+
             // Date
             Text('Tanggal', style: theme.textTheme.labelLarge),
             const SizedBox(height: 8),
@@ -308,6 +333,111 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
+  Widget _buildWalletSelector(BuildContext context, bool isDark) {
+    final walletProvider = context.watch<WalletProvider>();
+    final wallets = walletProvider.wallets;
+
+    if (wallets.isEmpty) return const SizedBox.shrink();
+
+    return InkWell(
+      onTap: () {
+        showModalBottomSheet(
+          context: context,
+          backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          builder: (ctx) => Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Pilih Dompet', style: Theme.of(ctx).textTheme.titleLarge),
+                const SizedBox(height: 16),
+                ...wallets.map((w) {
+                  final isSelected = w.id == _selectedWallet?.id;
+                  return ListTile(
+                    leading: Text(
+                      w.emoji,
+                      style: const TextStyle(fontSize: 24),
+                    ),
+                    title: Text(w.name),
+                    trailing: isSelected
+                        ? Icon(
+                            Icons.check_circle_rounded,
+                            color: Color(w.colorValue),
+                          )
+                        : null,
+                    selected: isSelected,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    onTap: () {
+                      setState(() => _selectedWallet = w);
+                      Navigator.pop(ctx);
+                    },
+                  );
+                }),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.cardAltDark : AppColors.cardAltLight,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            if (_selectedWallet != null) ...[
+              Text(
+                _selectedWallet!.emoji,
+                style: const TextStyle(fontSize: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _selectedWallet!.name,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              ),
+            ] else ...[
+              Icon(
+                Icons.account_balance_wallet_rounded,
+                size: 22,
+                color: isDark
+                    ? AppColors.textSecondaryDark
+                    : AppColors.textSecondaryLight,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Pilih dompet',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
+                ),
+              ),
+            ],
+            Icon(
+              Icons.chevron_right_rounded,
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _selectDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -344,6 +474,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       note: _noteController.text.trim().isEmpty
           ? null
           : _noteController.text.trim(),
+      walletId: _selectedWallet?.id,
     );
 
     if (_isEditing) {

@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import '../models/transaction_model.dart';
 import '../models/budget_model.dart';
 import '../services/database_service.dart';
+import 'wallet_provider.dart';
 
 class TransactionProvider extends ChangeNotifier {
   final DatabaseService _dbService = DatabaseService();
+  WalletProvider? _walletProvider;
+
+  void setWalletProvider(WalletProvider provider) {
+    _walletProvider = provider;
+  }
 
   List<TransactionModel> _transactions = [];
   List<TransactionModel> get transactions => _transactions;
@@ -105,16 +111,19 @@ class TransactionProvider extends ChangeNotifier {
   Future<void> addTransaction(TransactionModel transaction) async {
     await _dbService.insertTransaction(transaction);
     await loadData();
+    _walletProvider?.refreshBalances();
   }
 
   Future<void> updateTransaction(TransactionModel transaction) async {
     await _dbService.updateTransaction(transaction);
     await loadData();
+    _walletProvider?.refreshBalances();
   }
 
   Future<void> deleteTransaction(String id) async {
     await _dbService.deleteTransaction(id);
     await loadData();
+    _walletProvider?.refreshBalances();
   }
 
   // ── Budget CRUD ──

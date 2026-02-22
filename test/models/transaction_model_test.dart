@@ -73,6 +73,7 @@ void main() {
         category: TransactionCategory.food,
         date: testDate,
         note: 'Di warteg',
+        walletId: 'wallet-1',
       );
     });
 
@@ -84,6 +85,7 @@ void main() {
       expect(transaction.category, TransactionCategory.food);
       expect(transaction.date, testDate);
       expect(transaction.note, 'Di warteg');
+      expect(transaction.walletId, 'wallet-1');
     });
 
     test('generates UUID if id not provided', () {
@@ -109,6 +111,29 @@ void main() {
       expect(tx.note, isNull);
     });
 
+    test('walletId is nullable', () {
+      final tx = TransactionModel(
+        title: 'Test',
+        amount: 1000,
+        type: TransactionType.income,
+        category: TransactionCategory.salary,
+        date: testDate,
+      );
+      expect(tx.walletId, isNull);
+    });
+
+    test('walletId can be set', () {
+      final tx = TransactionModel(
+        title: 'Test',
+        amount: 1000,
+        type: TransactionType.income,
+        category: TransactionCategory.salary,
+        date: testDate,
+        walletId: 'my-wallet',
+      );
+      expect(tx.walletId, 'my-wallet');
+    });
+
     group('toMap', () {
       test('converts to map correctly', () {
         final map = transaction.toMap();
@@ -120,6 +145,19 @@ void main() {
         expect(map['category'], TransactionCategory.food.index);
         expect(map['date'], testDate.millisecondsSinceEpoch);
         expect(map['note'], 'Di warteg');
+        expect(map['walletId'], 'wallet-1');
+      });
+
+      test('stores null walletId correctly', () {
+        final tx = TransactionModel(
+          id: 'id',
+          title: 'Test',
+          amount: 100,
+          type: TransactionType.income,
+          category: TransactionCategory.salary,
+          date: testDate,
+        );
+        expect(tx.toMap()['walletId'], isNull);
       });
 
       test('stores null note correctly', () {
@@ -145,6 +183,7 @@ void main() {
           'category': TransactionCategory.salary.index,
           'date': testDate.millisecondsSinceEpoch,
           'note': 'Gaji Februari',
+          'walletId': 'wallet-x',
         };
 
         final tx = TransactionModel.fromMap(map);
@@ -156,6 +195,22 @@ void main() {
         expect(tx.category, TransactionCategory.salary);
         expect(tx.date, testDate);
         expect(tx.note, 'Gaji Februari');
+        expect(tx.walletId, 'wallet-x');
+      });
+
+      test('handles null walletId from map', () {
+        final map = {
+          'id': 'id',
+          'title': 'Test',
+          'amount': 100,
+          'type': 0,
+          'category': 0,
+          'date': testDate.millisecondsSinceEpoch,
+          'note': null,
+          'walletId': null,
+        };
+        final tx = TransactionModel.fromMap(map);
+        expect(tx.walletId, isNull);
       });
 
       test('handles null note from map', () {
@@ -202,6 +257,7 @@ void main() {
         expect(restored.category, transaction.category);
         expect(restored.date, transaction.date);
         expect(restored.note, transaction.note);
+        expect(restored.walletId, transaction.walletId);
       });
     });
 
@@ -216,6 +272,7 @@ void main() {
         expect(copy.category, transaction.category);
         expect(copy.date, transaction.date);
         expect(copy.note, transaction.note);
+        expect(copy.walletId, transaction.walletId);
       });
 
       test('copies with changed title', () {
@@ -263,6 +320,12 @@ void main() {
         expect(copy.amount, 99999);
         expect(copy.note, 'Updated note');
         expect(copy.id, transaction.id);
+      });
+
+      test('copies with changed walletId', () {
+        final copy = transaction.copyWith(walletId: 'wallet-2');
+        expect(copy.walletId, 'wallet-2');
+        expect(copy.title, transaction.title);
       });
     });
   });
