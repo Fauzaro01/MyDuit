@@ -184,8 +184,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     const SizedBox(height: 24),
 
                     // Monthly comparison chart
-                    Text('Perbandingan Bulanan',
-                        style: theme.textTheme.titleLarge),
+                    Text(
+                      'Perbandingan Bulanan',
+                      style: theme.textTheme.titleLarge,
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       'Perbandingan pengeluaran & pemasukan 6 bulan terakhir',
@@ -201,13 +203,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     const SizedBox(height: 24),
 
                     // Weekly summary
-                    Text('Ringkasan Mingguan',
-                        style: theme.textTheme.titleLarge),
-                    const SizedBox(height: 16),
-                    _WeeklySummary(
-                      showExpense: _showExpense,
-                      isDark: isDark,
+                    Text(
+                      'Ringkasan Mingguan',
+                      style: theme.textTheme.titleLarge,
                     ),
+                    const SizedBox(height: 16),
+                    _WeeklySummary(showExpense: _showExpense, isDark: isDark),
                   ],
                   const SizedBox(height: 100),
                 ],
@@ -612,11 +613,7 @@ class _MonthlyComparisonChartState extends State<_MonthlyComparisonChart> {
         month.year,
         month.month,
       );
-      data.add(_MonthData(
-        month: month,
-        income: income,
-        expense: expense,
-      ));
+      data.add(_MonthData(month: month, income: income, expense: expense));
       if (income > maxVal) maxVal = income;
       if (expense > maxVal) maxVal = expense;
     }
@@ -647,9 +644,8 @@ class _MonthlyComparisonChartState extends State<_MonthlyComparisonChart> {
           maxY: _maxY,
           barTouchData: BarTouchData(
             touchTooltipData: BarTouchTooltipData(
-              getTooltipColor: (_) => widget.isDark
-                  ? AppColors.cardAltDark
-                  : AppColors.cardLight,
+              getTooltipColor: (_) =>
+                  widget.isDark ? AppColors.cardAltDark : AppColors.cardLight,
               getTooltipItem: (group, groupIndex, rod, rodIndex) {
                 final label = rodIndex == 0 ? 'Masuk' : 'Keluar';
                 return BarTooltipItem(
@@ -676,10 +672,12 @@ class _MonthlyComparisonChartState extends State<_MonthlyComparisonChart> {
           ),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
-            topTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
             leftTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
@@ -704,8 +702,18 @@ class _MonthlyComparisonChartState extends State<_MonthlyComparisonChart> {
                   final idx = value.toInt();
                   if (idx < 0 || idx >= _data.length) return const SizedBox();
                   final months = [
-                    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-                    'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des',
+                    'Jan',
+                    'Feb',
+                    'Mar',
+                    'Apr',
+                    'Mei',
+                    'Jun',
+                    'Jul',
+                    'Ags',
+                    'Sep',
+                    'Okt',
+                    'Nov',
+                    'Des',
                   ];
                   return Text(
                     months[_data[idx].month.month - 1],
@@ -750,7 +758,11 @@ class _MonthData {
   final DateTime month;
   final double income;
   final double expense;
-  _MonthData({required this.month, required this.income, required this.expense});
+  _MonthData({
+    required this.month,
+    required this.income,
+    required this.expense,
+  });
 }
 
 // ── Weekly Summary ──────────────────────────────────────────

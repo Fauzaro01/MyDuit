@@ -20,8 +20,9 @@ class NotificationService {
   static Future<void> init() async {
     tzdata.initializeTimeZones();
 
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -38,8 +39,10 @@ class NotificationService {
 
   /// Request notification permission (Android 13+)
   static Future<bool> requestPermission() async {
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (android != null) {
       final granted = await android.requestNotificationsPermission();
       return granted ?? false;
@@ -98,8 +101,7 @@ class NotificationService {
   }
 
   /// Schedule daily notification
-  static Future<void> _scheduleDailyNotification(
-      int hour, int minute) async {
+  static Future<void> _scheduleDailyNotification(int hour, int minute) async {
     const androidDetails = AndroidNotificationDetails(
       _channelId,
       _channelName,

@@ -85,7 +85,9 @@ class _BackupScreenState extends State<BackupScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          backgroundColor: result.success ? AppColors.income : AppColors.expense,
+          backgroundColor: result.success
+              ? AppColors.income
+              : AppColors.expense,
         ),
       );
     }
@@ -134,7 +136,9 @@ class _BackupScreenState extends State<BackupScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          backgroundColor: result.success ? AppColors.income : AppColors.expense,
+          backgroundColor: result.success
+              ? AppColors.income
+              : AppColors.expense,
         ),
       );
     }
@@ -152,104 +156,96 @@ class _BackupScreenState extends State<BackupScreen> {
         children: [
           // Google account section
           Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.cardDark : AppColors.cardLight,
-                  borderRadius: BorderRadius.circular(20),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.cardDark : AppColors.cardLight,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.cloud_rounded,
+                  size: 48,
+                  color: isDark
+                      ? AppColors.primaryDark
+                      : AppColors.primaryLight,
                 ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.cloud_rounded,
-                      size: 48,
+                const SizedBox(height: 12),
+                Text('Google Drive', style: theme.textTheme.titleLarge),
+                const SizedBox(height: 8),
+                if (_isSignedIn && _userEmail != null) ...[
+                  Text(
+                    _userEmail!,
+                    style: theme.textTheme.bodyMedium?.copyWith(
                       color: isDark
-                          ? AppColors.primaryDark
-                          : AppColors.primaryLight,
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Google Drive',
-                      style: theme.textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton(
+                    onPressed: _signOut,
+                    child: const Text('Keluar Akun'),
+                  ),
+                ] else ...[
+                  Text(
+                    'Hubungkan akun Google untuk backup data keuanganmu ke cloud.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
                     ),
-                    const SizedBox(height: 8),
-                    if (_isSignedIn && _userEmail != null) ...[
-                      Text(
-                        _userEmail!,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      OutlinedButton(
-                        onPressed: _signOut,
-                        child: const Text('Keluar Akun'),
-                      ),
-                    ] else ...[
-                      Text(
-                        'Hubungkan akun Google untuk backup data keuanganmu ke cloud.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: _isLoading ? null : _signIn,
-                        icon: const Icon(Icons.login_rounded),
-                        label: const Text('Login dengan Google'),
-                      ),
-                    ],
-                  ],
-                ),
-              )
-              .animate()
-              .fadeIn(duration: 400.ms)
-              .slideY(begin: 0.05, end: 0),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _signIn,
+                    icon: const Icon(Icons.login_rounded),
+                    label: const Text('Login dengan Google'),
+                  ),
+                ],
+              ],
+            ),
+          ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
           const SizedBox(height: 20),
 
           if (_isSignedIn) ...[
             // Last backup info
             if (_lastBackup != null)
               Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.income.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(14),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.income.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.check_circle_rounded,
+                      color: AppColors.income,
                     ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.check_circle_rounded,
-                          color: AppColors.income,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Backup terakhir',
-                                style: theme.textTheme.bodyMedium,
-                              ),
-                              Text(
-                                _formatDate(_lastBackup!),
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  color: AppColors.income,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Backup terakhir',
+                            style: theme.textTheme.bodyMedium,
                           ),
-                        ),
-                      ],
+                          Text(
+                            _formatDate(_lastBackup!),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: AppColors.income,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  )
-                  .animate()
-                  .fadeIn(delay: 100.ms, duration: 400.ms),
+                  ],
+                ),
+              ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
             const SizedBox(height: 20),
 
             // Backup button
@@ -373,13 +369,13 @@ class _ActionCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style:
-                          theme.textTheme.titleMedium?.copyWith(fontSize: 14),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontSize: 14,
+                      ),
                     ),
                     Text(
                       subtitle,
-                      style:
-                          theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                      style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
                     ),
                   ],
                 ),

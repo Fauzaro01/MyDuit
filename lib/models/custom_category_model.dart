@@ -15,8 +15,8 @@ class CustomCategoryModel {
     required this.isIncome,
     this.colorValue = 0xFF0D9373,
     int? createdAt,
-  })  : id = id ?? const Uuid().v4(),
-        createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch;
+  }) : id = id ?? const Uuid().v4(),
+       createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch;
 
   Map<String, dynamic> toMap() {
     return {

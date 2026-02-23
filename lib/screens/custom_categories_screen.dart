@@ -78,10 +78,7 @@ class CustomCategoriesScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   ...provider.incomeCategories.asMap().entries.map((entry) {
-                    return _CategoryTile(
-                      category: entry.value,
-                      isDark: isDark,
-                    )
+                    return _CategoryTile(category: entry.value, isDark: isDark)
                         .animate()
                         .fadeIn(
                           delay: Duration(milliseconds: 50 * entry.key),
@@ -104,10 +101,7 @@ class CustomCategoriesScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   ...provider.expenseCategories.asMap().entries.map((entry) {
-                    return _CategoryTile(
-                      category: entry.value,
-                      isDark: isDark,
-                    )
+                    return _CategoryTile(category: entry.value, isDark: isDark)
                         .animate()
                         .fadeIn(
                           delay: Duration(milliseconds: 50 * entry.key),
@@ -131,20 +125,52 @@ class CustomCategoriesScreen extends StatelessWidget {
     CustomCategoryModel? existing,
   }) {
     final nameController = TextEditingController(text: existing?.name ?? '');
-    final emojiController = TextEditingController(text: existing?.emoji ?? '📌');
+    final emojiController = TextEditingController(
+      text: existing?.emoji ?? '📌',
+    );
     bool isIncome = existing?.isIncome ?? false;
     int colorValue = existing?.colorValue ?? 0xFF0D9373;
 
     final emojis = [
-      '🏠', '🚌', '🍽️', '👕', '💊', '📱', '🐶', '🎨',
-      '🏋️', '☕', '🎬', '📦', '🔧', '💼', '🎯', '📌',
-      '💎', '🎸', '🌱', '🍕', '🎮', '🛒', '✨', '🔔',
+      '🏠',
+      '🚌',
+      '🍽️',
+      '👕',
+      '💊',
+      '📱',
+      '🐶',
+      '🎨',
+      '🏋️',
+      '☕',
+      '🎬',
+      '📦',
+      '🔧',
+      '💼',
+      '🎯',
+      '📌',
+      '💎',
+      '🎸',
+      '🌱',
+      '🍕',
+      '🎮',
+      '🛒',
+      '✨',
+      '🔔',
     ];
 
     final colors = [
-      0xFF0D9373, 0xFF10B981, 0xFF3B82F6, 0xFF8B5CF6,
-      0xFFEC4899, 0xFFEF4444, 0xFFF59E0B, 0xFF6366F1,
-      0xFF14B8A6, 0xFF84CC16, 0xFFE11D48, 0xFF0891B2,
+      0xFF0D9373,
+      0xFF10B981,
+      0xFF3B82F6,
+      0xFF8B5CF6,
+      0xFFEC4899,
+      0xFFEF4444,
+      0xFFF59E0B,
+      0xFF6366F1,
+      0xFF14B8A6,
+      0xFF84CC16,
+      0xFFE11D48,
+      0xFF0891B2,
     ];
 
     showModalBottomSheet(
@@ -170,9 +196,7 @@ class CustomCategoriesScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      existing != null
-                          ? 'Edit Kategori'
-                          : 'Tambah Kategori',
+                      existing != null ? 'Edit Kategori' : 'Tambah Kategori',
                       style: Theme.of(ctx).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 20),
@@ -201,8 +225,8 @@ class CustomCategoriesScreen extends StatelessWidget {
                                   color: isIncome
                                       ? AppColors.income
                                       : (isDark
-                                          ? AppColors.textSecondaryDark
-                                          : AppColors.textSecondaryLight),
+                                            ? AppColors.textSecondaryDark
+                                            : AppColors.textSecondaryLight),
                                   fontWeight: isIncome
                                       ? FontWeight.w700
                                       : FontWeight.w500,
@@ -233,8 +257,8 @@ class CustomCategoriesScreen extends StatelessWidget {
                                   color: !isIncome
                                       ? AppColors.expense
                                       : (isDark
-                                          ? AppColors.textSecondaryDark
-                                          : AppColors.textSecondaryLight),
+                                            ? AppColors.textSecondaryDark
+                                            : AppColors.textSecondaryLight),
                                   fontWeight: !isIncome
                                       ? FontWeight.w700
                                       : FontWeight.w500,
@@ -276,12 +300,14 @@ class CustomCategoriesScreen extends StatelessWidget {
                               color: selected
                                   ? Color(colorValue).withValues(alpha: 0.2)
                                   : (isDark
-                                      ? AppColors.cardAltDark
-                                      : AppColors.cardAltLight),
+                                        ? AppColors.cardAltDark
+                                        : AppColors.cardAltLight),
                               borderRadius: BorderRadius.circular(10),
                               border: selected
                                   ? Border.all(
-                                      color: Color(colorValue), width: 2)
+                                      color: Color(colorValue),
+                                      width: 2,
+                                    )
                                   : null,
                             ),
                             alignment: Alignment.center,
@@ -317,10 +343,11 @@ class CustomCategoriesScreen extends StatelessWidget {
                               boxShadow: selected
                                   ? [
                                       BoxShadow(
-                                        color: Color(color)
-                                            .withValues(alpha: 0.5),
+                                        color: Color(
+                                          color,
+                                        ).withValues(alpha: 0.5),
                                         blurRadius: 8,
-                                      )
+                                      ),
                                     ]
                                   : null,
                             ),
@@ -436,10 +463,7 @@ class _CategoryTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               alignment: Alignment.center,
-              child: Text(
-                category.emoji,
-                style: const TextStyle(fontSize: 20),
-              ),
+              child: Text(category.emoji, style: const TextStyle(fontSize: 20)),
             ),
             const SizedBox(width: 14),
             Expanded(

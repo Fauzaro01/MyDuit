@@ -20,9 +20,7 @@ class GoogleDriveService {
   /// Sign in to Google
   static Future<bool> signIn() async {
     try {
-      _currentUser = await _googleSignIn.authenticate(
-        scopeHint: _scopes,
-      );
+      _currentUser = await _googleSignIn.authenticate(scopeHint: _scopes);
       return true;
     } catch (e) {
       debugPrint('Google Sign-In error: $e');
@@ -39,8 +37,7 @@ class GoogleDriveService {
   /// Check if already signed in (try lightweight auth)
   static Future<bool> isSignedIn() async {
     try {
-      final account =
-          await _googleSignIn.attemptLightweightAuthentication();
+      final account = await _googleSignIn.attemptLightweightAuthentication();
       if (account != null) {
         _currentUser = account;
         return true;
@@ -56,11 +53,8 @@ class GoogleDriveService {
       if (!signedIn) return null;
     }
     try {
-      final headers =
-          await _currentUser!.authorizationClient.authorizationHeaders(
-        _scopes,
-        promptIfNecessary: true,
-      );
+      final headers = await _currentUser!.authorizationClient
+          .authorizationHeaders(_scopes, promptIfNecessary: true);
       return headers;
     } catch (e) {
       debugPrint('Auth headers error: $e');
@@ -69,8 +63,7 @@ class GoogleDriveService {
   }
 
   /// Find or create the MyDuit backup folder
-  static Future<String?> _getOrCreateFolder(
-      Map<String, String> headers) async {
+  static Future<String?> _getOrCreateFolder(Map<String, String> headers) async {
     final searchUrl = Uri.parse(
       'https://www.googleapis.com/drive/v3/files'
       '?q=name%3D%27$_folderName%27%20and%20mimeType%3D%27application/vnd.google-apps.folder%27%20and%20trashed%3Dfalse'
@@ -86,14 +79,10 @@ class GoogleDriveService {
       }
     }
 
-    final createUrl =
-        Uri.parse('https://www.googleapis.com/drive/v3/files');
+    final createUrl = Uri.parse('https://www.googleapis.com/drive/v3/files');
     final createResp = await http.post(
       createUrl,
-      headers: {
-        ...headers,
-        'Content-Type': 'application/json',
-      },
+      headers: {...headers, 'Content-Type': 'application/json'},
       body: jsonEncode({
         'name': _folderName,
         'mimeType': 'application/vnd.google-apps.folder',
@@ -118,13 +107,17 @@ class GoogleDriveService {
       final dbFile = File(dbPath);
       if (!await dbFile.exists()) {
         return BackupResult(
-            success: false, message: 'Database tidak ditemukan');
+          success: false,
+          message: 'Database tidak ditemukan',
+        );
       }
 
       final folderId = await _getOrCreateFolder(headers);
       if (folderId == null) {
         return BackupResult(
-            success: false, message: 'Gagal membuat folder di Drive');
+          success: false,
+          message: 'Gagal membuat folder di Drive',
+        );
       }
 
       final existingId = await _findExistingBackup(headers, folderId);
@@ -138,16 +131,14 @@ class GoogleDriveService {
         );
         final resp = await http.patch(
           updateUrl,
-          headers: {
-            ...headers,
-            'Content-Type': 'application/octet-stream',
-          },
+          headers: {...headers, 'Content-Type': 'application/octet-stream'},
           body: dbBytes,
         );
         if (resp.statusCode != 200) {
           return BackupResult(
-              success: false,
-              message: 'Gagal memperbarui backup: ${resp.statusCode}');
+            success: false,
+            message: 'Gagal memperbarui backup: ${resp.statusCode}',
+          );
         }
       } else {
         final metadata = jsonEncode({
@@ -157,7 +148,8 @@ class GoogleDriveService {
         });
 
         final boundary = '===myduit_boundary===';
-        final body = '--$boundary\r\n'
+        final body =
+            '--$boundary\r\n'
             'Content-Type: application/json; charset=UTF-8\r\n\r\n'
             '$metadata\r\n'
             '--$boundary\r\n'
@@ -183,8 +175,9 @@ class GoogleDriveService {
         final resp = await request.send();
         if (resp.statusCode != 200) {
           return BackupResult(
-              success: false,
-              message: 'Gagal upload backup: ${resp.statusCode}');
+            success: false,
+            message: 'Gagal upload backup: ${resp.statusCode}',
+          );
         }
       }
 
@@ -209,14 +202,17 @@ class GoogleDriveService {
       final folderId = await _getOrCreateFolder(headers);
       if (folderId == null) {
         return BackupResult(
-            success: false, message: 'Folder backup tidak ditemukan');
+          success: false,
+          message: 'Folder backup tidak ditemukan',
+        );
       }
 
       final fileId = await _findExistingBackup(headers, folderId);
       if (fileId == null) {
         return BackupResult(
-            success: false,
-            message: 'Tidak ada file backup di Google Drive');
+          success: false,
+          message: 'Tidak ada file backup di Google Drive',
+        );
       }
 
       final downloadUrl = Uri.parse(
@@ -226,8 +222,9 @@ class GoogleDriveService {
 
       if (resp.statusCode != 200) {
         return BackupResult(
-            success: false,
-            message: 'Gagal download backup: ${resp.statusCode}');
+          success: false,
+          message: 'Gagal download backup: ${resp.statusCode}',
+        );
       }
 
       final dbPath = join(await getDatabasesPath(), 'myduit.db');
@@ -245,7 +242,9 @@ class GoogleDriveService {
   }
 
   static Future<String?> _findExistingBackup(
-      Map<String, String> headers, String folderId) async {
+    Map<String, String> headers,
+    String folderId,
+  ) async {
     final url = Uri.parse(
       'https://www.googleapis.com/drive/v3/files'
       '?q=name%3D%27$_backupFileName%27%20and%20%27$folderId%27%20in%20parents%20and%20trashed%3Dfalse'
@@ -299,9 +298,5 @@ class BackupResult {
   final String message;
   final DateTime? timestamp;
 
-  BackupResult({
-    required this.success,
-    required this.message,
-    this.timestamp,
-  });
+  BackupResult({required this.success, required this.message, this.timestamp});
 }

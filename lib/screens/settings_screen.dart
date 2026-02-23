@@ -424,9 +424,9 @@ class SettingsScreen extends StatelessWidget {
                   );
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Gagal: $e')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Gagal: $e')));
                   }
                 }
               },
@@ -463,9 +463,9 @@ class SettingsScreen extends StatelessWidget {
                   );
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Gagal: $e')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Gagal: $e')));
                   }
                 }
               },
@@ -475,8 +475,9 @@ class SettingsScreen extends StatelessWidget {
               leading: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: (isDark ? AppColors.primaryDark : AppColors.primaryLight)
-                      .withValues(alpha: 0.12),
+                  color:
+                      (isDark ? AppColors.primaryDark : AppColors.primaryLight)
+                          .withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -505,9 +506,9 @@ class SettingsScreen extends StatelessWidget {
                   );
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Gagal: $e')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Gagal: $e')));
                   }
                 }
               },
@@ -679,10 +680,7 @@ class _NotificationCardState extends State<_NotificationCard> {
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _time,
-    );
+    final picked = await showTimePicker(context: context, initialTime: _time);
     if (picked != null) {
       setState(() => _time = picked);
       if (_enabled) {

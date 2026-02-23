@@ -43,15 +43,13 @@ class PdfExportService {
     );
 
     final dir = await getApplicationDocumentsDirectory();
-    final fileName =
-        'MyDuit_${monthName.replaceAll(' ', '_')}.pdf';
+    final fileName = 'MyDuit_${monthName.replaceAll(' ', '_')}.pdf';
     final file = File('${dir.path}/$fileName');
     await file.writeAsBytes(await pdf.save());
 
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      text: 'Laporan Keuangan MyDuit - $monthName',
-    );
+    await Share.shareXFiles([
+      XFile(file.path),
+    ], text: 'Laporan Keuangan MyDuit - $monthName');
   }
 
   static Future<void> printReport(
@@ -120,10 +118,7 @@ class PdfExportService {
           ),
           pw.Text(
             monthName,
-            style: pw.TextStyle(
-              fontSize: 16,
-              fontWeight: pw.FontWeight.bold,
-            ),
+            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
           ),
         ],
       ),
@@ -144,7 +139,9 @@ class PdfExportService {
 
   // ── Summary ───────────────────────────────────────────────
   static pw.Widget _buildSummarySection(
-      double totalIncome, double totalExpense) {
+    double totalIncome,
+    double totalExpense,
+  ) {
     final balance = totalIncome - totalExpense;
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
@@ -170,8 +167,10 @@ class PdfExportService {
   static pw.Widget _summaryItem(String label, double amount, PdfColor color) {
     return pw.Column(
       children: [
-        pw.Text(label,
-            style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+        pw.Text(
+          label,
+          style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+        ),
         pw.SizedBox(height: 4),
         pw.Text(
           CurrencyFormatter.format(amount),
@@ -198,10 +197,7 @@ class PdfExportService {
       children: [
         pw.Text(
           'Pengeluaran per Kategori',
-          style: pw.TextStyle(
-            fontSize: 14,
-            fontWeight: pw.FontWeight.bold,
-          ),
+          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
         ),
         pw.SizedBox(height: 8),
         ...sorted.map((entry) {
@@ -213,9 +209,12 @@ class PdfExportService {
             child: pw.Row(
               children: [
                 pw.SizedBox(
-                    width: 100,
-                    child: pw.Text(entry.key.label,
-                        style: const pw.TextStyle(fontSize: 10))),
+                  width: 100,
+                  child: pw.Text(
+                    entry.key.label,
+                    style: const pw.TextStyle(fontSize: 10),
+                  ),
+                ),
                 pw.Expanded(
                   child: pw.Stack(
                     children: [
@@ -230,8 +229,8 @@ class PdfExportService {
                         height: 12,
                         width:
                             (totalExpense > 0 ? entry.value / totalExpense : 0)
-                                    .toDouble() *
-                                200,
+                                .toDouble() *
+                            200,
                         decoration: pw.BoxDecoration(
                           color: PdfColors.teal300,
                           borderRadius: pw.BorderRadius.circular(3),
@@ -242,20 +241,24 @@ class PdfExportService {
                 ),
                 pw.SizedBox(width: 8),
                 pw.SizedBox(
-                    width: 80,
-                    child: pw.Text(
-                      CurrencyFormatter.format(entry.value),
-                      style: const pw.TextStyle(fontSize: 10),
-                      textAlign: pw.TextAlign.right,
-                    )),
+                  width: 80,
+                  child: pw.Text(
+                    CurrencyFormatter.format(entry.value),
+                    style: const pw.TextStyle(fontSize: 10),
+                    textAlign: pw.TextAlign.right,
+                  ),
+                ),
                 pw.SizedBox(
-                    width: 35,
-                    child: pw.Text(
-                      '$pct%',
-                      style: const pw.TextStyle(
-                          fontSize: 9, color: PdfColors.grey600),
-                      textAlign: pw.TextAlign.right,
-                    )),
+                  width: 35,
+                  child: pw.Text(
+                    '$pct%',
+                    style: const pw.TextStyle(
+                      fontSize: 9,
+                      color: PdfColors.grey600,
+                    ),
+                    textAlign: pw.TextAlign.right,
+                  ),
+                ),
               ],
             ),
           );
@@ -265,17 +268,13 @@ class PdfExportService {
   }
 
   // ── Transaction Table ─────────────────────────────────────
-  static pw.Widget _buildTransactionTable(
-      List<TransactionModel> transactions) {
+  static pw.Widget _buildTransactionTable(List<TransactionModel> transactions) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
           'Daftar Transaksi',
-          style: pw.TextStyle(
-            fontSize: 14,
-            fontWeight: pw.FontWeight.bold,
-          ),
+          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
         ),
         pw.SizedBox(height: 8),
         pw.TableHelper.fromTextArray(
@@ -284,13 +283,14 @@ class PdfExportService {
             fontSize: 9,
             color: PdfColors.white,
           ),
-          headerDecoration:
-              const pw.BoxDecoration(color: PdfColors.teal),
+          headerDecoration: const pw.BoxDecoration(color: PdfColors.teal),
           headerAlignment: pw.Alignment.centerLeft,
           cellStyle: const pw.TextStyle(fontSize: 9),
           cellAlignment: pw.Alignment.centerLeft,
-          cellPadding:
-              const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          cellPadding: const pw.EdgeInsets.symmetric(
+            horizontal: 6,
+            vertical: 4,
+          ),
           headers: ['Tanggal', 'Judul', 'Kategori', 'Tipe', 'Jumlah'],
           data: transactions.map((tx) {
             return [
