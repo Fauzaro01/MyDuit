@@ -7,6 +7,7 @@ import '../models/transfer_model.dart';
 import '../models/recurring_transaction_model.dart';
 import '../models/savings_goal_model.dart';
 import '../models/debt_model.dart';
+import '../models/custom_category_model.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -29,7 +30,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -83,6 +84,7 @@ class DatabaseService {
     ''');
 
     await _createV4Tables(db);
+    await _createV5Tables(db);
 
     // Seed default wallet
     await _seedDefaultWallet(db);
@@ -135,6 +137,19 @@ class DatabaseService {
     ''');
   }
 
+  Future<void> _createV5Tables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS custom_categories(
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        emoji TEXT NOT NULL DEFAULT '📌',
+        isIncome INTEGER NOT NULL DEFAULT 0,
+        colorValue INTEGER NOT NULL DEFAULT 855405427,
+        createdAt INTEGER NOT NULL
+      )
+    ''');
+  }
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('''
@@ -180,6 +195,9 @@ class DatabaseService {
     }
     if (oldVersion < 4) {
       await _createV4Tables(db);
+    }
+    if (oldVersion < 5) {
+      await _createV5Tables(db);
     }
   }
 
@@ -826,5 +844,42 @@ class DatabaseService {
       [type.index],
     );
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  // ── Custom Category CRUD ──────────────────────────────────
+  Future<void> insertCustomCategory(CustomCategoryModel category) async {
+    final db = await database;
+    await db.insert(
+      'custom_categories',
+      category.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateCustomCategory(CustomCategoryModel category) async {
+    final db = await database;
+    await db.update(
+      'custom_categories',
+      category.toMap(),
+      where: 'id = ?',
+      whereArgs: [category.id],
+    );
+  }
+
+  Future<void> deleteCustomCategory(String id) async {
+    final db = await database;
+    await db.delete('custom_categories', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<CustomCategoryModel>> getAllCustomCategories() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'custom_categories',
+      orderBy: 'createdAt ASC',
+    );
+    return List.generate(
+      maps.length,
+      (i) => CustomCategoryModel.fromMap(maps[i]),
+    );
   }
 }

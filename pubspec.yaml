@@ -43,6 +43,13 @@ dependencies:
   lucide_icons: ^0.257.0
   path_provider: ^2.1.5
   share_plus: ^10.1.4
+  pdf: ^3.11.3
+  printing: ^5.14.2
+  googleapis_auth: ^2.0.0
+  google_sign_in: ^7.2.0
+  http: ^1.6.0
+  flutter_local_notifications: ^20.1.0
+  timezone: ^0.10.1
 
 dev_dependencies:
   flutter_test:

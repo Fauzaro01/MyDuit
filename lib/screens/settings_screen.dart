@@ -6,12 +6,16 @@ import '../providers/theme_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/app_lock_provider.dart';
 import '../services/export_service.dart';
+import '../services/pdf_export_service.dart';
+import '../services/notification_service.dart';
 import 'budget_screen.dart';
 import 'wallet_screen.dart';
 import 'recurring_transactions_screen.dart';
 import 'savings_goals_screen.dart';
 import 'debt_screen.dart';
 import 'pin_lock_screen.dart';
+import 'custom_categories_screen.dart';
+import 'backup_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -64,9 +68,9 @@ class SettingsScreen extends StatelessWidget {
               _SettingsTile(
                 icon: Icons.file_download_outlined,
                 title: 'Ekspor Data',
-                subtitle: 'Bagikan laporan keuangan (CSV)',
+                subtitle: 'Bagikan laporan keuangan (CSV/PDF)',
                 trailing: const Icon(Icons.chevron_right_rounded, size: 22),
-                onTap: () => _exportData(context),
+                onTap: () => _showExportDialog(context),
               ),
               const Divider(height: 1, indent: 56),
               _SettingsTile(
@@ -108,6 +112,34 @@ class SettingsScreen extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const DebtScreen()),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.category_rounded,
+                title: 'Kategori Kustom',
+                subtitle: 'Buat kategori sesuai kebutuhanmu',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const CustomCategoriesScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.cloud_rounded,
+                title: 'Backup & Restore',
+                subtitle: 'Simpan data ke Google Drive',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const BackupScreen()),
                   );
                 },
               ),
@@ -157,6 +189,16 @@ class SettingsScreen extends StatelessWidget {
               )
               .animate()
               .fadeIn(delay: 100.ms, duration: 400.ms)
+              .slideY(begin: 0.05, end: 0),
+
+          const SizedBox(height: 24),
+
+          // Notifications section
+          _SectionHeader(title: 'Notifikasi'),
+          const SizedBox(height: 12),
+          _NotificationCard(isDark: isDark)
+              .animate()
+              .fadeIn(delay: 120.ms, duration: 400.ms)
               .slideY(begin: 0.05, end: 0),
 
           const SizedBox(height: 24),
@@ -314,7 +356,7 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _exportData(BuildContext context) async {
+  Future<void> _showExportDialog(BuildContext context) async {
     final provider = context.read<TransactionProvider>();
     final transactions = provider.transactions;
 
@@ -333,25 +375,148 @@ class SettingsScreen extends StatelessWidget {
       return;
     }
 
-    try {
-      await ExportService.shareExport(
-        transactions,
-        year: provider.selectedYear,
-        month: provider.selectedMonth,
-      );
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal mengekspor: $e'),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Ekspor Data', style: Theme.of(ctx).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text(
+              '${transactions.length} transaksi',
+              style: Theme.of(ctx).textTheme.bodyMedium,
             ),
-          ),
-        );
-      }
-    }
+            const SizedBox(height: 20),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.income.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.table_chart_rounded,
+                  color: AppColors.income,
+                ),
+              ),
+              title: const Text('Export CSV'),
+              subtitle: const Text('Spreadsheet sederhana'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              onTap: () async {
+                Navigator.pop(ctx);
+                try {
+                  await ExportService.shareExport(
+                    transactions,
+                    year: provider.selectedYear,
+                    month: provider.selectedMonth,
+                  );
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Gagal: $e')),
+                    );
+                  }
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.expense.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.picture_as_pdf_rounded,
+                  color: AppColors.expense,
+                ),
+              ),
+              title: const Text('Export PDF'),
+              subtitle: const Text('Laporan lengkap profesional'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              onTap: () async {
+                Navigator.pop(ctx);
+                try {
+                  await PdfExportService.exportAndShare(
+                    transactions,
+                    year: provider.selectedYear,
+                    month: provider.selectedMonth,
+                    totalIncome: provider.totalIncome,
+                    totalExpense: provider.totalExpense,
+                    expenseCategoryTotals: provider.expenseCategoryTotals,
+                  );
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Gagal: $e')),
+                    );
+                  }
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: (isDark ? AppColors.primaryDark : AppColors.primaryLight)
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.print_rounded,
+                  color: isDark
+                      ? AppColors.primaryDark
+                      : AppColors.primaryLight,
+                ),
+              ),
+              title: const Text('Cetak PDF'),
+              subtitle: const Text('Print langsung'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              onTap: () async {
+                Navigator.pop(ctx);
+                try {
+                  await PdfExportService.printReport(
+                    transactions,
+                    year: provider.selectedYear,
+                    month: provider.selectedMonth,
+                    totalIncome: provider.totalIncome,
+                    totalExpense: provider.totalExpense,
+                    expenseCategoryTotals: provider.expenseCategoryTotals,
+                  );
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Gagal: $e')),
+                    );
+                  }
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
   }
 
   String _getThemeModeLabel(ThemeMode mode) {
@@ -456,6 +621,106 @@ class _SettingsTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _NotificationCard extends StatefulWidget {
+  final bool isDark;
+  const _NotificationCard({required this.isDark});
+
+  @override
+  State<_NotificationCard> createState() => _NotificationCardState();
+}
+
+class _NotificationCardState extends State<_NotificationCard> {
+  bool _enabled = false;
+  TimeOfDay _time = const TimeOfDay(hour: 20, minute: 0);
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final enabled = await NotificationService.isEnabled();
+    final time = await NotificationService.getScheduledTime();
+    if (mounted) {
+      setState(() {
+        _enabled = enabled;
+        _time = time;
+      });
+    }
+  }
+
+  Future<void> _toggleNotification(bool value) async {
+    if (value) {
+      final granted = await NotificationService.requestPermission();
+      if (!granted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Izin notifikasi ditolak'),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      await NotificationService.enable(hour: _time.hour, minute: _time.minute);
+    } else {
+      await NotificationService.disable();
+    }
+    setState(() => _enabled = value);
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _time,
+    );
+    if (picked != null) {
+      setState(() => _time = picked);
+      if (_enabled) {
+        await NotificationService.updateTime(picked.hour, picked.minute);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsCard(
+      isDark: widget.isDark,
+      children: [
+        _SettingsTile(
+          icon: Icons.notifications_rounded,
+          title: 'Pengingat Harian',
+          subtitle: _enabled
+              ? 'Aktif pukul ${_time.format(context)}'
+              : 'Ingatkan untuk mencatat keuangan',
+          trailing: Switch.adaptive(
+            value: _enabled,
+            onChanged: _toggleNotification,
+            activeColor: widget.isDark
+                ? AppColors.primaryDark
+                : AppColors.primaryLight,
+          ),
+        ),
+        if (_enabled) ...[
+          const Divider(height: 1, indent: 56),
+          _SettingsTile(
+            icon: Icons.access_time_rounded,
+            title: 'Waktu Pengingat',
+            subtitle: _time.format(context),
+            trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+            onTap: _pickTime,
+          ),
+        ],
+      ],
     );
   }
 }

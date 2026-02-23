@@ -181,6 +181,33 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     Text('Tren Harian', style: theme.textTheme.titleLarge),
                     const SizedBox(height: 16),
                     _DailyTrendChart(showExpense: _showExpense, isDark: isDark),
+                    const SizedBox(height: 24),
+
+                    // Monthly comparison chart
+                    Text('Perbandingan Bulanan',
+                        style: theme.textTheme.titleLarge),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Perbandingan pengeluaran & pemasukan 6 bulan terakhir',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _MonthlyComparisonChart(isDark: isDark),
+                    const SizedBox(height: 24),
+
+                    // Weekly summary
+                    Text('Ringkasan Mingguan',
+                        style: theme.textTheme.titleLarge),
+                    const SizedBox(height: 16),
+                    _WeeklySummary(
+                      showExpense: _showExpense,
+                      isDark: isDark,
+                    ),
                   ],
                   const SizedBox(height: 100),
                 ],
@@ -544,5 +571,283 @@ class _ToggleTab extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// ── Monthly Comparison Bar Chart ────────────────────────────
+class _MonthlyComparisonChart extends StatefulWidget {
+  final bool isDark;
+  const _MonthlyComparisonChart({required this.isDark});
+
+  @override
+  State<_MonthlyComparisonChart> createState() =>
+      _MonthlyComparisonChartState();
+}
+
+class _MonthlyComparisonChartState extends State<_MonthlyComparisonChart> {
+  List<_MonthData> _data = [];
+  double _maxY = 100;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final provider = context.read<TransactionProvider>();
+    final now = DateTime(provider.selectedYear, provider.selectedMonth);
+    final List<_MonthData> data = [];
+    double maxVal = 0;
+
+    for (int i = 5; i >= 0; i--) {
+      final month = DateTime(now.year, now.month - i);
+      final income = await provider.getTotalByTypeAndMonth(
+        TransactionType.income,
+        month.year,
+        month.month,
+      );
+      final expense = await provider.getTotalByTypeAndMonth(
+        TransactionType.expense,
+        month.year,
+        month.month,
+      );
+      data.add(_MonthData(
+        month: month,
+        income: income,
+        expense: expense,
+      ));
+      if (income > maxVal) maxVal = income;
+      if (expense > maxVal) maxVal = expense;
+    }
+
+    if (mounted) {
+      setState(() {
+        _data = data;
+        _maxY = maxVal > 0 ? maxVal * 1.2 : 100;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_data.isEmpty) {
+      return const SizedBox(height: 200);
+    }
+
+    return Container(
+      height: 220,
+      padding: const EdgeInsets.fromLTRB(12, 24, 16, 12),
+      decoration: BoxDecoration(
+        color: widget.isDark ? AppColors.cardDark : AppColors.cardLight,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: BarChart(
+        BarChartData(
+          maxY: _maxY,
+          barTouchData: BarTouchData(
+            touchTooltipData: BarTouchTooltipData(
+              getTooltipColor: (_) => widget.isDark
+                  ? AppColors.cardAltDark
+                  : AppColors.cardLight,
+              getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                final label = rodIndex == 0 ? 'Masuk' : 'Keluar';
+                return BarTooltipItem(
+                  '$label\n${CurrencyFormatter.formatCompact(rod.toY)}',
+                  TextStyle(
+                    color: rodIndex == 0 ? AppColors.income : AppColors.expense,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                  ),
+                );
+              },
+            ),
+          ),
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            horizontalInterval: _maxY / 4,
+            getDrawingHorizontalLine: (value) => FlLine(
+              color: widget.isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.black.withValues(alpha: 0.05),
+              strokeWidth: 1,
+            ),
+          ),
+          borderData: FlBorderData(show: false),
+          titlesData: FlTitlesData(
+            topTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 48,
+                getTitlesWidget: (value, meta) {
+                  return Text(
+                    CurrencyFormatter.formatCompact(value),
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: widget.isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                    ),
+                  );
+                },
+              ),
+            ),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, meta) {
+                  final idx = value.toInt();
+                  if (idx < 0 || idx >= _data.length) return const SizedBox();
+                  final months = [
+                    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+                    'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des',
+                  ];
+                  return Text(
+                    months[_data[idx].month.month - 1],
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: widget.isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          barGroups: _data.asMap().entries.map((entry) {
+            return BarChartGroupData(
+              x: entry.key,
+              barRods: [
+                BarChartRodData(
+                  toY: entry.value.income,
+                  color: AppColors.income,
+                  width: 10,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                BarChartRodData(
+                  toY: entry.value.expense,
+                  color: AppColors.expense,
+                  width: 10,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ],
+              barsSpace: 4,
+            );
+          }).toList(),
+        ),
+      ),
+    ).animate().fadeIn(delay: 500.ms, duration: 500.ms);
+  }
+}
+
+class _MonthData {
+  final DateTime month;
+  final double income;
+  final double expense;
+  _MonthData({required this.month, required this.income, required this.expense});
+}
+
+// ── Weekly Summary ──────────────────────────────────────────
+class _WeeklySummary extends StatefulWidget {
+  final bool showExpense;
+  final bool isDark;
+  const _WeeklySummary({required this.showExpense, required this.isDark});
+
+  @override
+  State<_WeeklySummary> createState() => _WeeklySummaryState();
+}
+
+class _WeeklySummaryState extends State<_WeeklySummary> {
+  List<double> _weeklyTotals = [0, 0, 0, 0, 0];
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _calculate();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WeeklySummary oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.showExpense != widget.showExpense) _calculate();
+  }
+
+  void _calculate() {
+    final provider = context.read<TransactionProvider>();
+    final transactions = widget.showExpense
+        ? provider.expenseTransactions
+        : provider.incomeTransactions;
+
+    final weekTotals = List<double>.filled(5, 0);
+    for (final tx in transactions) {
+      final weekIndex = ((tx.date.day - 1) / 7).floor().clamp(0, 4);
+      weekTotals[weekIndex] += tx.amount;
+    }
+
+    setState(() => _weeklyTotals = weekTotals);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = widget.showExpense ? AppColors.expense : AppColors.income;
+    final maxWeek = _weeklyTotals.reduce((a, b) => a > b ? a : b);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: widget.isDark ? AppColors.cardDark : AppColors.cardLight,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: List.generate(5, (i) {
+          final pct = maxWeek > 0 ? _weeklyTotals[i] / maxWeek : 0.0;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 70,
+                  child: Text(
+                    'Minggu ${i + 1}',
+                    style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                  ),
+                ),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: pct,
+                      backgroundColor: color.withValues(alpha: 0.1),
+                      valueColor: AlwaysStoppedAnimation(color),
+                      minHeight: 8,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 80,
+                  child: Text(
+                    CurrencyFormatter.formatCompact(_weeklyTotals[i]),
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ),
+    ).animate().fadeIn(delay: 600.ms, duration: 500.ms);
   }
 }

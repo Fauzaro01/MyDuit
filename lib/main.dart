@@ -13,6 +13,8 @@ import 'providers/recurring_provider.dart';
 import 'providers/savings_provider.dart';
 import 'providers/debt_provider.dart';
 import 'providers/app_lock_provider.dart';
+import 'providers/custom_category_provider.dart';
+import 'services/notification_service.dart';
 import 'screens/main_navigation.dart';
 import 'screens/splash_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -38,6 +40,7 @@ void main() {
       late SavingsProvider savingsProvider;
       late DebtProvider debtProvider;
       late AppLockProvider appLockProvider;
+      late CustomCategoryProvider customCategoryProvider;
 
       try {
         await initializeDateFormatting('id_ID', null);
@@ -62,6 +65,15 @@ void main() {
         debtProvider = DebtProvider();
         appLockProvider = AppLockProvider();
         await appLockProvider.init();
+        customCategoryProvider = CustomCategoryProvider();
+
+        // Initialize notifications
+        try {
+          await NotificationService.init();
+          await NotificationService.rescheduleIfEnabled();
+        } catch (_) {
+          // Non-fatal: notifications are optional
+        }
       } catch (e) {
         debugPrint('Provider init error: $e');
         walletProvider = WalletProvider();
@@ -70,6 +82,7 @@ void main() {
         savingsProvider = SavingsProvider();
         debtProvider = DebtProvider();
         appLockProvider = AppLockProvider();
+        customCategoryProvider = CustomCategoryProvider();
       }
 
       runApp(
@@ -82,6 +95,7 @@ void main() {
             ChangeNotifierProvider.value(value: savingsProvider),
             ChangeNotifierProvider.value(value: debtProvider),
             ChangeNotifierProvider.value(value: appLockProvider),
+            ChangeNotifierProvider.value(value: customCategoryProvider),
           ],
           child: MyDuitApp(showOnboarding: !onboardingComplete),
         ),

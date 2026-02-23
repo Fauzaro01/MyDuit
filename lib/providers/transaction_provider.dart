@@ -198,4 +198,12 @@ class TransactionProvider extends ChangeNotifier {
   ) async {
     return _dbService.getDailyTotals(type, _selectedYear, _selectedMonth);
   }
+
+  Future<double> getTotalByTypeAndMonth(
+    TransactionType type,
+    int year,
+    int month,
+  ) async {
+    return _dbService.getTotalByTypeAndMonth(type, year, month);
+  }
 }
