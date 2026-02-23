@@ -4,6 +4,9 @@ import '../models/transaction_model.dart';
 import '../models/budget_model.dart';
 import '../models/wallet_model.dart';
 import '../models/transfer_model.dart';
+import '../models/recurring_transaction_model.dart';
+import '../models/savings_goal_model.dart';
+import '../models/debt_model.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -26,7 +29,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -79,8 +82,57 @@ class DatabaseService {
       )
     ''');
 
+    await _createV4Tables(db);
+
     // Seed default wallet
     await _seedDefaultWallet(db);
+  }
+
+  Future<void> _createV4Tables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS recurring_transactions(
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        amount REAL NOT NULL,
+        type INTEGER NOT NULL,
+        category INTEGER NOT NULL,
+        frequency INTEGER NOT NULL,
+        startDate INTEGER NOT NULL,
+        endDate INTEGER,
+        note TEXT,
+        walletId TEXT,
+        isActive INTEGER NOT NULL DEFAULT 1,
+        lastGeneratedDate INTEGER,
+        FOREIGN KEY (walletId) REFERENCES wallets(id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS savings_goals(
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        emoji TEXT NOT NULL DEFAULT '🎯',
+        targetAmount REAL NOT NULL,
+        currentAmount REAL NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL,
+        targetDate INTEGER,
+        isCompleted INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS debts(
+        id TEXT PRIMARY KEY,
+        personName TEXT NOT NULL,
+        amount REAL NOT NULL,
+        paidAmount REAL NOT NULL DEFAULT 0,
+        type INTEGER NOT NULL,
+        note TEXT,
+        createdAt INTEGER NOT NULL,
+        dueDate INTEGER,
+        isSettled INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -125,6 +177,9 @@ class DatabaseService {
         'UPDATE transactions SET walletId = ? WHERE walletId IS NULL',
         [defaultWalletId],
       );
+    }
+    if (oldVersion < 4) {
+      await _createV4Tables(db);
     }
   }
 
@@ -527,5 +582,249 @@ class DatabaseService {
       whereArgs: [year, month],
     );
     return List.generate(maps.length, (i) => BudgetModel.fromMap(maps[i]));
+  }
+
+  // ── Recurring Transaction CRUD ────────────────────────────
+  Future<void> insertRecurringTransaction(
+    RecurringTransactionModel recurring,
+  ) async {
+    final db = await database;
+    await db.insert(
+      'recurring_transactions',
+      recurring.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateRecurringTransaction(
+    RecurringTransactionModel recurring,
+  ) async {
+    final db = await database;
+    await db.update(
+      'recurring_transactions',
+      recurring.toMap(),
+      where: 'id = ?',
+      whereArgs: [recurring.id],
+    );
+  }
+
+  Future<void> deleteRecurringTransaction(String id) async {
+    final db = await database;
+    await db.delete('recurring_transactions', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<RecurringTransactionModel>> getAllRecurringTransactions() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'recurring_transactions',
+      orderBy: 'startDate DESC',
+    );
+    return List.generate(
+      maps.length,
+      (i) => RecurringTransactionModel.fromMap(maps[i]),
+    );
+  }
+
+  Future<List<RecurringTransactionModel>>
+  getActiveRecurringTransactions() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'recurring_transactions',
+      where: 'isActive = ?',
+      whereArgs: [1],
+      orderBy: 'startDate ASC',
+    );
+    return List.generate(
+      maps.length,
+      (i) => RecurringTransactionModel.fromMap(maps[i]),
+    );
+  }
+
+  /// Generate pending recurring transactions up to today
+  Future<List<TransactionModel>> generatePendingRecurringTransactions() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final activeRecurrings = await getActiveRecurringTransactions();
+    final List<TransactionModel> generated = [];
+
+    for (final recurring in activeRecurrings) {
+      // Skip if end date has passed
+      if (recurring.endDate != null && recurring.endDate!.isBefore(today)) {
+        await updateRecurringTransaction(recurring.copyWith(isActive: false));
+        continue;
+      }
+
+      DateTime nextDate = recurring.lastGeneratedDate != null
+          ? recurring.nextOccurrence(recurring.lastGeneratedDate!)
+          : recurring.startDate;
+
+      while (!nextDate.isAfter(today)) {
+        final transaction = TransactionModel(
+          title: recurring.title,
+          amount: recurring.amount,
+          type: recurring.type,
+          category: recurring.category,
+          date: nextDate,
+          note: recurring.note != null
+              ? '${recurring.note} (otomatis)'
+              : '(transaksi otomatis)',
+          walletId: recurring.walletId,
+        );
+        await insertTransaction(transaction);
+        generated.add(transaction);
+        nextDate = recurring.nextOccurrence(nextDate);
+      }
+
+      // Update lastGeneratedDate
+      if (generated.isNotEmpty) {
+        await updateRecurringTransaction(
+          recurring.copyWith(lastGeneratedDate: today),
+        );
+      }
+    }
+    return generated;
+  }
+
+  // ── Savings Goal CRUD ─────────────────────────────────────
+  Future<void> insertSavingsGoal(SavingsGoalModel goal) async {
+    final db = await database;
+    await db.insert(
+      'savings_goals',
+      goal.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateSavingsGoal(SavingsGoalModel goal) async {
+    final db = await database;
+    await db.update(
+      'savings_goals',
+      goal.toMap(),
+      where: 'id = ?',
+      whereArgs: [goal.id],
+    );
+  }
+
+  Future<void> deleteSavingsGoal(String id) async {
+    final db = await database;
+    await db.delete('savings_goals', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<SavingsGoalModel>> getAllSavingsGoals() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'savings_goals',
+      orderBy: 'isCompleted ASC, createdAt DESC',
+    );
+    return List.generate(maps.length, (i) => SavingsGoalModel.fromMap(maps[i]));
+  }
+
+  Future<void> addToSavingsGoal(String goalId, double amount) async {
+    final db = await database;
+    await db.rawUpdate(
+      'UPDATE savings_goals SET currentAmount = currentAmount + ? WHERE id = ?',
+      [amount, goalId],
+    );
+    // Check if goal is reached
+    final result = await db.query(
+      'savings_goals',
+      where: 'id = ?',
+      whereArgs: [goalId],
+    );
+    if (result.isNotEmpty) {
+      final goal = SavingsGoalModel.fromMap(result.first);
+      if (goal.isReached && !goal.isCompleted) {
+        await db.update(
+          'savings_goals',
+          {'isCompleted': 1},
+          where: 'id = ?',
+          whereArgs: [goalId],
+        );
+      }
+    }
+  }
+
+  // ── Debt CRUD ─────────────────────────────────────────────
+  Future<void> insertDebt(DebtModel debt) async {
+    final db = await database;
+    await db.insert(
+      'debts',
+      debt.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateDebt(DebtModel debt) async {
+    final db = await database;
+    await db.update(
+      'debts',
+      debt.toMap(),
+      where: 'id = ?',
+      whereArgs: [debt.id],
+    );
+  }
+
+  Future<void> deleteDebt(String id) async {
+    final db = await database;
+    await db.delete('debts', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<DebtModel>> getAllDebts() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'debts',
+      orderBy: 'isSettled ASC, dueDate ASC, createdAt DESC',
+    );
+    return List.generate(maps.length, (i) => DebtModel.fromMap(maps[i]));
+  }
+
+  Future<List<DebtModel>> getDebtsByType(DebtType type) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'debts',
+      where: 'type = ?',
+      whereArgs: [type.index],
+      orderBy: 'isSettled ASC, dueDate ASC, createdAt DESC',
+    );
+    return List.generate(maps.length, (i) => DebtModel.fromMap(maps[i]));
+  }
+
+  Future<void> addDebtPayment(String debtId, double amount) async {
+    final db = await database;
+    await db.rawUpdate(
+      'UPDATE debts SET paidAmount = paidAmount + ? WHERE id = ?',
+      [amount, debtId],
+    );
+    final result = await db.query(
+      'debts',
+      where: 'id = ?',
+      whereArgs: [debtId],
+    );
+    if (result.isNotEmpty) {
+      final debt = DebtModel.fromMap(result.first);
+      if (debt.isFullyPaid && !debt.isSettled) {
+        await db.update(
+          'debts',
+          {'isSettled': 1},
+          where: 'id = ?',
+          whereArgs: [debtId],
+        );
+      }
+    }
+  }
+
+  Future<double> getTotalDebtAmount(
+    DebtType type, {
+    bool settledOnly = false,
+  }) async {
+    final db = await database;
+    final where = settledOnly
+        ? 'type = ? AND isSettled = 1'
+        : 'type = ? AND isSettled = 0';
+    final result = await db.rawQuery(
+      'SELECT SUM(amount - paidAmount) as total FROM debts WHERE $where',
+      [type.index],
+    );
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 }

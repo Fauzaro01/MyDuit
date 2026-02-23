@@ -4,9 +4,14 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../providers/theme_provider.dart';
 import '../providers/transaction_provider.dart';
+import '../providers/app_lock_provider.dart';
 import '../services/export_service.dart';
 import 'budget_screen.dart';
 import 'wallet_screen.dart';
+import 'recurring_transactions_screen.dart';
+import 'savings_goals_screen.dart';
+import 'debt_screen.dart';
+import 'pin_lock_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -63,6 +68,49 @@ class SettingsScreen extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_right_rounded, size: 22),
                 onTap: () => _exportData(context),
               ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.repeat_rounded,
+                title: 'Transaksi Berulang',
+                subtitle: 'Otomatiskan tagihan & pemasukan',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const RecurringTransactionsScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.savings_rounded,
+                title: 'Tujuan Tabungan',
+                subtitle: 'Menabung untuk impianmu',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SavingsGoalsScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.receipt_long_rounded,
+                title: 'Hutang & Piutang',
+                subtitle: 'Catat & lacak hutang piutang',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const DebtScreen()),
+                  );
+                },
+              ),
             ],
           ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
 
@@ -109,6 +157,81 @@ class SettingsScreen extends StatelessWidget {
               )
               .animate()
               .fadeIn(delay: 100.ms, duration: 400.ms)
+              .slideY(begin: 0.05, end: 0),
+
+          const SizedBox(height: 24),
+
+          // Security section
+          _SectionHeader(title: 'Keamanan'),
+          const SizedBox(height: 12),
+          Builder(
+                builder: (context) {
+                  final lockProvider = context.watch<AppLockProvider>();
+                  return _SettingsCard(
+                    isDark: isDark,
+                    children: [
+                      _SettingsTile(
+                        icon: Icons.lock_rounded,
+                        title: 'Kunci PIN',
+                        subtitle: lockProvider.isLockEnabled
+                            ? 'Aktif'
+                            : 'Lindungi data keuanganmu',
+                        trailing: Switch.adaptive(
+                          value: lockProvider.isLockEnabled,
+                          onChanged: (val) async {
+                            if (val) {
+                              await Navigator.push<bool>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const PinLockScreen(isSetup: true),
+                                ),
+                              );
+                            } else {
+                              lockProvider.removePin();
+                            }
+                          },
+                          activeColor: isDark
+                              ? AppColors.primaryDark
+                              : AppColors.primaryLight,
+                        ),
+                      ),
+                      if (lockProvider.isLockEnabled) ...[
+                        const Divider(height: 1, indent: 56),
+                        _SettingsTile(
+                          icon: Icons.password_rounded,
+                          title: 'Ubah PIN',
+                          subtitle: 'Ganti PIN saat ini',
+                          trailing: const Icon(
+                            Icons.chevron_right_rounded,
+                            size: 22,
+                          ),
+                          onTap: () async {
+                            // First verify current PIN
+                            final verified = await Navigator.push<bool>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const PinLockScreen(),
+                              ),
+                            );
+                            if (verified == true && context.mounted) {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const PinLockScreen(isSetup: true),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              )
+              .animate()
+              .fadeIn(delay: 150.ms, duration: 400.ms)
               .slideY(begin: 0.05, end: 0),
 
           const SizedBox(height: 24),
