@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -10,26 +13,61 @@ import 'screens/main_navigation.dart';
 import 'screens/splash_screen.dart';
 import 'screens/onboarding_screen.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await initializeDateFormatting('id_ID', null);
+void main() {
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
 
-  final prefs = await SharedPreferences.getInstance();
-  final onboardingComplete = prefs.getBool('onboarding_complete') ?? false;
+      // Global Flutter error handler
+      FlutterError.onError = (FlutterErrorDetails details) {
+        FlutterError.presentError(details);
+        if (kReleaseMode) {
+          debugPrint('FlutterError: ${details.exceptionAsString()}');
+        }
+      };
 
-  final walletProvider = WalletProvider();
-  final transactionProvider = TransactionProvider();
-  transactionProvider.setWalletProvider(walletProvider);
+      bool onboardingComplete = false;
+      late WalletProvider walletProvider;
+      late TransactionProvider transactionProvider;
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider.value(value: walletProvider),
-        ChangeNotifierProvider.value(value: transactionProvider),
-      ],
-      child: MyDuitApp(showOnboarding: !onboardingComplete),
-    ),
+      try {
+        await initializeDateFormatting('id_ID', null);
+      } catch (_) {
+        // Non-fatal: date formatting will fall back to defaults
+      }
+
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        onboardingComplete = prefs.getBool('onboarding_complete') ?? false;
+      } catch (_) {
+        // Non-fatal: default to showing onboarding
+      }
+
+      try {
+        walletProvider = WalletProvider();
+        transactionProvider = TransactionProvider();
+        transactionProvider.setWalletProvider(walletProvider);
+      } catch (e) {
+        debugPrint('Provider init error: $e');
+        walletProvider = WalletProvider();
+        transactionProvider = TransactionProvider();
+      }
+
+      runApp(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => ThemeProvider()),
+            ChangeNotifierProvider.value(value: walletProvider),
+            ChangeNotifierProvider.value(value: transactionProvider),
+          ],
+          child: MyDuitApp(showOnboarding: !onboardingComplete),
+        ),
+      );
+    },
+    (error, stackTrace) {
+      debugPrint('Uncaught error: $error');
+      debugPrint('Stack trace: $stackTrace');
+    },
   );
 }
 

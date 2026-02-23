@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:myduit/config/app_theme.dart';
 
 /// A mock HTTP client that returns an empty response for any request.
@@ -73,11 +72,8 @@ class _FakeHttpClientResponse implements HttpClientResponse {
 void main() {
   setUpAll(() {
     TestWidgetsFlutterBinding.ensureInitialized();
-    // Use fake HTTP overrides so GoogleFonts doesn't make real network calls
+    // Use fake HTTP overrides so font tests don't make real network calls
     HttpOverrides.global = _FakeHttpOverrides();
-    // Allow runtime fetching so it doesn't throw synchronous exceptions,
-    // but the fake HTTP client will return empty responses
-    GoogleFonts.config.allowRuntimeFetching = true;
   });
 
   tearDownAll(() {

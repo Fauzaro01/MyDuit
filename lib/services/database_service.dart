@@ -11,10 +11,12 @@ class DatabaseService {
   DatabaseService._internal();
 
   Database? _database;
+  Future<Database>? _initFuture;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDatabase();
+    _initFuture ??= _initDatabase();
+    _database = await _initFuture!;
     return _database!;
   }
 

@@ -11,7 +11,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'package:myduit/main.dart';
@@ -81,7 +80,6 @@ class _FakeHttpClientResponse implements HttpClientResponse {
 void main() {
   setUpAll(() async {
     HttpOverrides.global = _FakeHttpOverrides();
-    GoogleFonts.config.allowRuntimeFetching = true;
     await initializeDateFormatting('id_ID', null);
   });
 

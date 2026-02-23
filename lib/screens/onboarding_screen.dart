@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
@@ -127,7 +126,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         const SizedBox(height: 48),
                         Text(
                           page.title,
-                          style: GoogleFonts.plusJakartaSans(
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontFamily,
                             fontSize: 26,
                             fontWeight: FontWeight.w800,
                             color: isDark
@@ -139,7 +139,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         const SizedBox(height: 16),
                         Text(
                           page.description,
-                          style: GoogleFonts.plusJakartaSans(
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontFamily,
                             fontSize: 15,
                             fontWeight: FontWeight.w400,
                             color: isDark

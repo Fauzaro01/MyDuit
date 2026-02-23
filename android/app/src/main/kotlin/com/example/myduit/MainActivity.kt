@@ -1,4 +1,4 @@
-package com.example.myduit
+package com.myduit.app
 
 import io.flutter.embedding.android.FlutterActivity
 

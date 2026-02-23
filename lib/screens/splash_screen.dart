@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../config/app_theme.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -65,7 +64,8 @@ class _SplashScreenState extends State<SplashScreen> {
             const SizedBox(height: 24),
             Text(
                   'MyDuit',
-                  style: GoogleFonts.plusJakartaSans(
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontFamily,
                     fontSize: 36,
                     fontWeight: FontWeight.w800,
                     color: primary,
@@ -78,7 +78,8 @@ class _SplashScreenState extends State<SplashScreen> {
             const SizedBox(height: 8),
             Text(
                   'Kelola keuanganmu dengan mudah',
-                  style: GoogleFonts.plusJakartaSans(
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontFamily,
                     fontSize: 14,
                     fontWeight: FontWeight.w400,
                     color: isDark
