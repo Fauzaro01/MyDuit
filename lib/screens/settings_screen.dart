@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../config/app_theme.dart';
 import '../providers/theme_provider.dart';
 import '../providers/transaction_provider.dart';
@@ -347,6 +348,20 @@ class SettingsScreen extends StatelessWidget {
                   ),
                   const Divider(height: 1, indent: 56),
                   _SettingsTile(
+                    icon: Icons.person_rounded,
+                    title: 'Developer',
+                    subtitle: 'Muhamad Fauzaan',
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  _SettingsTile(
+                    icon: Icons.open_in_new_rounded,
+                    title: 'GitHub',
+                    subtitle: 'github.com/fauzaro01',
+                    trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                    onTap: () => _launchUrl('https://github.com/fauzaro01'),
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  _SettingsTile(
                     icon: Icons.code_rounded,
                     title: 'Dibuat dengan',
                     subtitle: 'Flutter & ❤️',
@@ -410,6 +425,13 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _showExportDialog(BuildContext context) async {

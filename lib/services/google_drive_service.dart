@@ -3,56 +3,173 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+
+/// Backup schedule options
+enum BackupSchedule { none, weekly, monthly }
 
 class GoogleDriveService {
   static const _scopes = ['https://www.googleapis.com/auth/drive.file'];
   static const _backupFileName = 'myduit_backup.db';
   static const _folderName = 'MyDuit Backups';
 
+  // SharedPreferences keys
+  static const _prefSignedIn = 'gdrive_signed_in';
+  static const _prefUserEmail = 'gdrive_user_email';
+  static const _prefSchedule = 'gdrive_backup_schedule';
+  static const _prefLastAutoBackup = 'gdrive_last_auto_backup';
+
+  /// Web Application OAuth Client ID from Google Cloud Console.
+  /// This is required by google_sign_in v7.x on Android.
+  static const _serverClientId =
+      '1064880963972-ha7f2fissbeo8df8kpfns03arunh966o.apps.googleusercontent.com';
+
   static final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  static bool _initialized = false;
+
+  /// Initialize GoogleSignIn — must be called once before any sign-in.
+  static Future<void> init() async {
+    if (_initialized) return;
+    try {
+      await _googleSignIn.initialize(serverClientId: _serverClientId);
+      _initialized = true;
+    } catch (e) {
+      debugPrint('GoogleSignIn init error: $e');
+    }
+  }
 
   static GoogleSignInAccount? _currentUser;
   static GoogleSignInAccount? get currentUser => _currentUser;
-  static String? get userEmail => _currentUser?.email;
+  static String? get userEmail => _currentUser?.email ?? _cachedEmail;
+
+  /// Cached email from SharedPreferences (shown while session restores)
+  static String? _cachedEmail;
+
+  /// Whether user has an active Google session object
+  static bool get hasLiveSession => _currentUser != null;
 
   /// Last error for UI display
   static String? _lastError;
   static String? get lastError => _lastError;
 
-  /// Sign in to Google — returns error message on failure, null on success
+  // ─── Step 1: Check connection status (SharedPreferences only) ───
+
+  /// Fast check — reads only SharedPreferences, no network/auth calls.
+  /// Returns true if user was previously signed in.
+  static Future<bool> checkConnectionStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final connected = prefs.getBool(_prefSignedIn) ?? false;
+    if (connected) {
+      _cachedEmail = prefs.getString(_prefUserEmail);
+    }
+    return connected;
+  }
+
+  // ─── Step 2: Silent session restore (lightweight auth, up to 3x) ───
+
+  /// Try to silently restore the Google session without showing any UI.
+  /// Attempts lightweight auth up to [maxAttempts] times.
+  /// Returns true if session was restored.
+  static Future<bool> restoreSessionSilently({int maxAttempts = 3}) async {
+    await init();
+    for (int i = 0; i < maxAttempts; i++) {
+      try {
+        final account = await _googleSignIn.attemptLightweightAuthentication();
+        if (account != null) {
+          _currentUser = account;
+          _cachedEmail = account.email;
+          debugPrint('Session restored silently (attempt ${i + 1})');
+          return true;
+        }
+      } catch (e) {
+        debugPrint('Lightweight auth attempt ${i + 1} failed: $e');
+      }
+      // Small delay before retry
+      if (i < maxAttempts - 1) {
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+    }
+    debugPrint('All $maxAttempts lightweight auth attempts failed');
+    return false;
+  }
+
+  // ─── Step 3: Interactive sign-in (lightweight 3x → full auth) ────
+
+  /// Full sign-in flow: tries lightweight 3x, then falls back to
+  /// interactive authenticate() that shows Google UI.
+  /// Returns error message on failure, null on success.
   static Future<String?> signIn() async {
     _lastError = null;
+    await init();
+
+    // First: try silent restore
+    final silentOk = await restoreSessionSilently();
+    if (silentOk) {
+      await _persistSignIn();
+      return null;
+    }
+
+    // Fallback: full interactive auth
     try {
       _currentUser = await _googleSignIn.authenticate(scopeHint: _scopes);
       if (_currentUser == null) {
         _lastError = 'Login dibatalkan atau akun tidak dipilih';
         return _lastError;
       }
+      await _persistSignIn();
       return null; // success
     } catch (e) {
-      final errStr = e.toString();
-      debugPrint('Google Sign-In error: $e');
-
-      if (errStr.contains('sign_in_canceled') || errStr.contains('canceled')) {
-        _lastError = 'Login dibatalkan oleh pengguna';
-      } else if (errStr.contains('network_error') ||
-          errStr.contains('ApiException: 7')) {
-        _lastError = 'Tidak ada koneksi internet';
-      } else if (errStr.contains('ApiException: 12500') ||
-          errStr.contains('DEVELOPER_ERROR') ||
-          errStr.contains('ApiException: 10')) {
-        _lastError =
-            'Google Cloud Console belum dikonfigurasi.\n\n'
-            'Buka Pengaturan > Backup & Restore untuk panduan setup.';
-      } else if (errStr.contains('ApiException: 12501')) {
-        _lastError = 'Login dibatalkan';
-      } else {
-        _lastError = 'Error: $errStr';
-      }
+      _lastError = _parseAuthError(e);
       return _lastError;
     }
+  }
+
+  /// Save sign-in state to SharedPreferences
+  static Future<void> _persistSignIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefSignedIn, true);
+    await prefs.setString(_prefUserEmail, _currentUser!.email);
+    _cachedEmail = _currentUser!.email;
+  }
+
+  /// Parse auth exceptions into user-friendly messages
+  static String _parseAuthError(Object e) {
+    final errStr = e.toString();
+    debugPrint('Google Sign-In error: $e');
+
+    if (errStr.contains('sign_in_canceled') || errStr.contains('canceled')) {
+      return 'Login dibatalkan oleh pengguna';
+    } else if (errStr.contains('network_error') ||
+        errStr.contains('ApiException: 7')) {
+      return 'Tidak ada koneksi internet';
+    } else if (errStr.contains('ApiException: 12500') ||
+        errStr.contains('DEVELOPER_ERROR') ||
+        errStr.contains('ApiException: 10') ||
+        errStr.contains('clientConfigurationError')) {
+      return 'Konfigurasi OAuth belum benar. Hubungi developer.';
+    } else if (errStr.contains('ApiException: 12501')) {
+      return 'Login dibatalkan';
+    } else {
+      return 'Error: $errStr';
+    }
+  }
+
+  // ─── Step 4: Ensure authenticated (lazy auth for operations) ────
+
+  /// Make sure we have a live session. Used before backup/restore.
+  /// Tries silent restore first, then full auth if needed.
+  /// Returns error message on failure, null on success.
+  static Future<String?> ensureAuthenticated() async {
+    if (_currentUser != null) return null; // already have session
+
+    // Try silent first
+    final silentOk = await restoreSessionSilently();
+    if (silentOk) return null;
+
+    // Need full interactive auth
+    return await signIn();
   }
 
   /// Sign out
@@ -61,34 +178,100 @@ class GoogleDriveService {
       await _googleSignIn.signOut();
     } catch (_) {}
     _currentUser = null;
+    _cachedEmail = null;
     _lastError = null;
+    // Clear persisted state
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefSignedIn, false);
+    await prefs.remove(_prefUserEmail);
+    await prefs.remove(_prefSchedule);
+    await prefs.remove(_prefLastAutoBackup);
   }
 
-  /// Check if already signed in (try lightweight auth)
-  static Future<bool> isSignedIn() async {
-    try {
-      final account = await _googleSignIn.attemptLightweightAuthentication();
-      if (account != null) {
-        _currentUser = account;
-        return true;
+  // ─── Backup Schedule ────────────────────────────────────────
+
+  /// Get current backup schedule
+  static Future<BackupSchedule> getBackupSchedule() async {
+    final prefs = await SharedPreferences.getInstance();
+    final idx = prefs.getInt(_prefSchedule) ?? 0;
+    return BackupSchedule.values[idx.clamp(
+      0,
+      BackupSchedule.values.length - 1,
+    )];
+  }
+
+  /// Set backup schedule
+  static Future<void> setBackupSchedule(BackupSchedule schedule) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_prefSchedule, schedule.index);
+  }
+
+  /// Get last auto-backup timestamp
+  static Future<DateTime?> getLastAutoBackupTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ms = prefs.getInt(_prefLastAutoBackup);
+    if (ms == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  /// Run auto-backup if schedule is due. Call on app startup.
+  static Future<void> runScheduledBackupIfNeeded() async {
+    final prefs = await SharedPreferences.getInstance();
+    final wasSigned = prefs.getBool(_prefSignedIn) ?? false;
+    if (!wasSigned) return;
+
+    final schedule = await getBackupSchedule();
+    if (schedule == BackupSchedule.none) return;
+
+    final lastAuto = await getLastAutoBackupTime();
+    final now = DateTime.now();
+
+    bool shouldBackup = false;
+    if (lastAuto == null) {
+      shouldBackup = true;
+    } else {
+      final diff = now.difference(lastAuto);
+      if (schedule == BackupSchedule.weekly && diff.inDays >= 7) {
+        shouldBackup = true;
+      } else if (schedule == BackupSchedule.monthly && diff.inDays >= 30) {
+        shouldBackup = true;
       }
-    } catch (_) {}
-    return false;
+    }
+
+    if (shouldBackup) {
+      // Try to silently restore session (no UI popup)
+      final restored = await restoreSessionSilently();
+      if (!restored) return;
+
+      debugPrint('Running scheduled backup ($schedule)...');
+      final result = await backup();
+      if (result.success) {
+        await prefs.setInt(_prefLastAutoBackup, now.millisecondsSinceEpoch);
+        debugPrint('Scheduled backup completed successfully.');
+      } else {
+        debugPrint('Scheduled backup failed: ${result.message}');
+      }
+    }
   }
 
-  /// Get auth headers
+  /// Get auth headers — handles token refresh automatically.
+  /// Uses ensureAuthenticated() for lazy session restore.
   static Future<Map<String, String>?> _getAuthHeaders() async {
-    if (_currentUser == null) {
-      final error = await signIn();
-      if (error != null) return null;
-    }
+    // Ensure we have a live session (silent → interactive if needed)
+    final error = await ensureAuthenticated();
+    if (error != null) return null;
+
     try {
+      // authorizationHeaders handles refresh tokens internally.
+      // promptIfNecessary: true lets it re-prompt if token expired.
       final headers = await _currentUser!.authorizationClient
           .authorizationHeaders(_scopes, promptIfNecessary: true);
       return headers;
     } catch (e) {
       debugPrint('Auth headers error: $e');
       _lastError = 'Gagal mendapatkan token akses: $e';
+      // Session might be stale — clear so next call retries
+      _currentUser = null;
       return null;
     }
   }

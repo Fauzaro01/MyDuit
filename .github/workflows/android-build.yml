@@ -1,0 +1,87 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release
+
+      - name: Get version from pubspec
+        id: version
+        run: |
+          VERSION=$(grep 'version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Found version: $VERSION"
+
+      - name: Get short SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}-${{ steps.sha.outputs.short }}
+          name: MyDuit v${{ steps.version.outputs.version }} (${{ steps.sha.outputs.short }})
+          body: |
+            ## MyDuit - Pencatat Keuangan Pribadi
+
+            **Build otomatis** dari commit `${{ github.sha }}`
+
+            ### Cara Install
+            1. Download file `app-release.apk` di bawah
+            2. Buka file APK di HP Android
+            3. Izinkan instalasi dari sumber tidak dikenal jika diminta
+          files: app-release.apk
+          draft: false
+          prerelease: false

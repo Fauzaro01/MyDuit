@@ -15,6 +15,7 @@ import 'providers/debt_provider.dart';
 import 'providers/app_lock_provider.dart';
 import 'providers/custom_category_provider.dart';
 import 'services/notification_service.dart';
+import 'services/google_drive_service.dart';
 import 'screens/main_navigation.dart';
 import 'screens/splash_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -73,6 +74,15 @@ void main() {
           await NotificationService.rescheduleIfEnabled();
         } catch (_) {
           // Non-fatal: notifications are optional
+        }
+
+        // Initialize Google Sign-In
+        try {
+          await GoogleDriveService.init();
+          // Run scheduled auto-backup if due
+          GoogleDriveService.runScheduledBackupIfNeeded();
+        } catch (_) {
+          // Non-fatal: Google Drive backup is optional
         }
       } catch (e) {
         debugPrint('Provider init error: $e');
