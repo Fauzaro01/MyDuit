@@ -42,15 +42,34 @@ class _BackupScreenState extends State<BackupScreen> {
   }
 
   Future<void> _signIn() async {
-    setState(() => _isLoading = true);
-    final success = await GoogleDriveService.signIn();
+    setState(() {
+      _isLoading = true;
+      _statusMessage = null;
+    });
+    final error = await GoogleDriveService.signIn();
+    final success = error == null;
     setState(() {
       _isSignedIn = success;
       _isLoading = false;
       _userEmail = GoogleDriveService.userEmail;
+      if (!success) {
+        _statusMessage = error;
+      }
     });
     if (success) {
       _loadLastBackupTime();
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error ?? 'Gagal login'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          backgroundColor: AppColors.expense,
+        ),
+      );
     }
   }
 
@@ -203,11 +222,37 @@ class _BackupScreenState extends State<BackupScreen> {
                     icon: const Icon(Icons.login_rounded),
                     label: const Text('Login dengan Google'),
                   ),
+                  if (_statusMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.expense.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _statusMessage!,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppColors.expense,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ],
             ),
           ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
           const SizedBox(height: 20),
+
+          // Setup guide (show when not signed in)
+          if (!_isSignedIn)
+            _SetupGuideCard(isDark: isDark)
+                .animate()
+                .fadeIn(delay: 100.ms, duration: 400.ms)
+                .slideY(begin: 0.05, end: 0),
+
+          if (!_isSignedIn) const SizedBox(height: 20),
 
           if (_isSignedIn) ...[
             // Last backup info
@@ -384,6 +429,137 @@ class _ActionCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SetupGuideCard extends StatelessWidget {
+  final bool isDark;
+  const _SetupGuideCard({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final steps = [
+      'Buka console.cloud.google.com',
+      'Buat project baru (atau pilih yang ada)',
+      'Aktifkan "Google Drive API" di Library',
+      'Buka "OAuth consent screen" → External → Create',
+      'Isi App name: MyDuit, User support email, Developer email',
+      'Buka "Credentials" → Create OAuth client ID',
+      'Pilih Application type: Android',
+      'Package name: com.myduit.app',
+      'Masukkan SHA-1 fingerprint dari debug.keystore',
+      'Simpan, lalu coba Login lagi',
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.cardDark : AppColors.cardLight,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.orange.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.help_outline_rounded,
+                  color: Colors.orange,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Panduan Setup Google Drive',
+                  style: theme.textTheme.titleMedium?.copyWith(fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...steps.asMap().entries.map(
+            (entry) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color:
+                          (isDark
+                                  ? AppColors.primaryDark
+                                  : AppColors.primaryLight)
+                              .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '${entry.key + 1}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                        color: isDark
+                            ? AppColors.primaryDark
+                            : AppColors.primaryLight,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      entry.value,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: (isDark ? AppColors.primaryDark : AppColors.primaryLight)
+                  .withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.fingerprint_rounded, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SelectableText(
+                    'SHA-1: 3F:A8:C7:BD:27:55:B0:CE:AF:A1:65:E1:31:AB:DD:48:4B:29:B3:E7',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

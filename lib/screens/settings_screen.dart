@@ -241,6 +241,62 @@ class SettingsScreen extends StatelessWidget {
                       if (lockProvider.isLockEnabled) ...[
                         const Divider(height: 1, indent: 56),
                         _SettingsTile(
+                          icon: Icons.fingerprint_rounded,
+                          title: 'Sidik Jari',
+                          subtitle: lockProvider.isFingerprintEnabled
+                              ? 'Aktif'
+                              : lockProvider.isFingerprintAvailable
+                              ? 'Buka kunci dengan sidik jari'
+                              : 'Perangkat tidak mendukung',
+                          trailing: Switch.adaptive(
+                            value: lockProvider.isFingerprintEnabled,
+                            onChanged: lockProvider.canEnableFingerprint
+                                ? (val) async {
+                                    if (val) {
+                                      // Verify PIN first before enabling fingerprint
+                                      final verified =
+                                          await Navigator.push<bool>(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const PinLockScreen(),
+                                            ),
+                                          );
+                                      if (verified == true && context.mounted) {
+                                        await lockProvider
+                                            .setFingerprintEnabled(true);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: const Text(
+                                                'Sidik jari berhasil diaktifkan 🔓',
+                                              ),
+                                              behavior:
+                                                  SnackBarBehavior.floating,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    } else {
+                                      await lockProvider.setFingerprintEnabled(
+                                        false,
+                                      );
+                                    }
+                                  }
+                                : null,
+                            activeColor: isDark
+                                ? AppColors.primaryDark
+                                : AppColors.primaryLight,
+                          ),
+                        ),
+                        const Divider(height: 1, indent: 56),
+                        _SettingsTile(
                           icon: Icons.password_rounded,
                           title: 'Ubah PIN',
                           subtitle: 'Ganti PIN saat ini',

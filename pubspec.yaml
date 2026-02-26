@@ -50,6 +50,7 @@ dependencies:
   http: ^1.6.0
   flutter_local_notifications: ^20.1.0
   timezone: ^0.10.1
+  local_auth: ^3.0.0
 
 dev_dependencies:
   flutter_test:

@@ -17,21 +17,51 @@ class GoogleDriveService {
   static GoogleSignInAccount? get currentUser => _currentUser;
   static String? get userEmail => _currentUser?.email;
 
-  /// Sign in to Google
-  static Future<bool> signIn() async {
+  /// Last error for UI display
+  static String? _lastError;
+  static String? get lastError => _lastError;
+
+  /// Sign in to Google — returns error message on failure, null on success
+  static Future<String?> signIn() async {
+    _lastError = null;
     try {
       _currentUser = await _googleSignIn.authenticate(scopeHint: _scopes);
-      return true;
+      if (_currentUser == null) {
+        _lastError = 'Login dibatalkan atau akun tidak dipilih';
+        return _lastError;
+      }
+      return null; // success
     } catch (e) {
+      final errStr = e.toString();
       debugPrint('Google Sign-In error: $e');
-      return false;
+
+      if (errStr.contains('sign_in_canceled') || errStr.contains('canceled')) {
+        _lastError = 'Login dibatalkan oleh pengguna';
+      } else if (errStr.contains('network_error') ||
+          errStr.contains('ApiException: 7')) {
+        _lastError = 'Tidak ada koneksi internet';
+      } else if (errStr.contains('ApiException: 12500') ||
+          errStr.contains('DEVELOPER_ERROR') ||
+          errStr.contains('ApiException: 10')) {
+        _lastError =
+            'Google Cloud Console belum dikonfigurasi.\n\n'
+            'Buka Pengaturan > Backup & Restore untuk panduan setup.';
+      } else if (errStr.contains('ApiException: 12501')) {
+        _lastError = 'Login dibatalkan';
+      } else {
+        _lastError = 'Error: $errStr';
+      }
+      return _lastError;
     }
   }
 
   /// Sign out
   static Future<void> signOut() async {
-    await _googleSignIn.signOut();
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
     _currentUser = null;
+    _lastError = null;
   }
 
   /// Check if already signed in (try lightweight auth)
@@ -49,8 +79,8 @@ class GoogleDriveService {
   /// Get auth headers
   static Future<Map<String, String>?> _getAuthHeaders() async {
     if (_currentUser == null) {
-      final signedIn = await signIn();
-      if (!signedIn) return null;
+      final error = await signIn();
+      if (error != null) return null;
     }
     try {
       final headers = await _currentUser!.authorizationClient
@@ -58,6 +88,7 @@ class GoogleDriveService {
       return headers;
     } catch (e) {
       debugPrint('Auth headers error: $e');
+      _lastError = 'Gagal mendapatkan token akses: $e';
       return null;
     }
   }
@@ -100,7 +131,10 @@ class GoogleDriveService {
     try {
       final headers = await _getAuthHeaders();
       if (headers == null) {
-        return BackupResult(success: false, message: 'Gagal login Google');
+        return BackupResult(
+          success: false,
+          message: _lastError ?? 'Gagal login Google',
+        );
       }
 
       final dbPath = join(await getDatabasesPath(), 'myduit.db');
@@ -196,7 +230,10 @@ class GoogleDriveService {
     try {
       final headers = await _getAuthHeaders();
       if (headers == null) {
-        return BackupResult(success: false, message: 'Gagal login Google');
+        return BackupResult(
+          success: false,
+          message: _lastError ?? 'Gagal login Google',
+        );
       }
 
       final folderId = await _getOrCreateFolder(headers);
