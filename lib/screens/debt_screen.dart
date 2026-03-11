@@ -597,7 +597,9 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
     if (widget.existing != null) {
       final d = widget.existing!;
       _nameController.text = d.personName;
-      _amountController.text = d.amount.toStringAsFixed(0);
+      _amountController.text = CurrencyInputService.isFormatted
+          ? RupiahInputFormatter.formatNumber(d.amount)
+          : d.amount.toStringAsFixed(0);
       _noteController.text = d.note ?? '';
       _type = d.type;
       _dueDate = d.dueDate;
@@ -717,10 +719,12 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
                 ),
               ),
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: CurrencyInputService.isFormatted
+                  ? [RupiahInputFormatter()]
+                  : [FilteringTextInputFormatter.digitsOnly],
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Masukkan jumlah';
-                if (double.tryParse(v) == null || double.parse(v) <= 0) {
+                if (RupiahInputFormatter.parse(v) <= 0) {
                   return 'Jumlah harus lebih dari 0';
                 }
                 return null;
@@ -820,7 +824,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
     final debt = DebtModel(
       id: widget.existing?.id,
       personName: _nameController.text.trim(),
-      amount: double.parse(_amountController.text),
+      amount: RupiahInputFormatter.parse(_amountController.text),
       paidAmount: widget.existing?.paidAmount ?? 0,
       type: _type,
       note: _noteController.text.trim().isEmpty

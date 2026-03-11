@@ -4,7 +4,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
-import '../utils/formatters.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/insights_widget.dart';
 import '../widgets/transaction_detail_sheet.dart';

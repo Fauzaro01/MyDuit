@@ -16,6 +16,7 @@ import 'providers/app_lock_provider.dart';
 import 'providers/custom_category_provider.dart';
 import 'services/notification_service.dart';
 import 'services/google_drive_service.dart';
+import 'utils/formatters.dart';
 import 'screens/main_navigation.dart';
 import 'screens/splash_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -48,6 +49,10 @@ void main() {
       } catch (_) {
         // Non-fatal: date formatting will fall back to defaults
       }
+
+      try {
+        await CurrencyInputService.load();
+      } catch (_) {}
 
       try {
         final prefs = await SharedPreferences.getInstance();

@@ -228,7 +228,9 @@ class _AddEditRecurringSheetState extends State<_AddEditRecurringSheet> {
     if (widget.existing != null) {
       final r = widget.existing!;
       _titleController.text = r.title;
-      _amountController.text = r.amount.toStringAsFixed(0);
+      _amountController.text = CurrencyInputService.isFormatted
+          ? RupiahInputFormatter.formatNumber(r.amount)
+          : r.amount.toStringAsFixed(0);
       _noteController.text = r.note ?? '';
       _type = r.type;
       _category = r.category;
@@ -327,10 +329,12 @@ class _AddEditRecurringSheetState extends State<_AddEditRecurringSheet> {
               controller: _amountController,
               decoration: _inputDecoration('Jumlah', Icons.payments_rounded),
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: CurrencyInputService.isFormatted
+                  ? [RupiahInputFormatter()]
+                  : [FilteringTextInputFormatter.digitsOnly],
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Masukkan jumlah';
-                if (double.tryParse(v) == null || double.parse(v) <= 0) {
+                if (RupiahInputFormatter.parse(v) <= 0) {
                   return 'Jumlah harus lebih dari 0';
                 }
                 return null;
@@ -567,7 +571,7 @@ class _AddEditRecurringSheetState extends State<_AddEditRecurringSheet> {
     final recurring = RecurringTransactionModel(
       id: widget.existing?.id,
       title: _titleController.text.trim(),
-      amount: double.parse(_amountController.text),
+      amount: RupiahInputFormatter.parse(_amountController.text),
       type: _type,
       category: _category,
       frequency: _frequency,

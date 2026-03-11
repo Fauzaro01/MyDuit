@@ -53,12 +53,10 @@ class WalletProvider extends ChangeNotifier {
     }
 
     // Set active wallet if not set
-    if (_activeWallet == null) {
-      _activeWallet = _wallets.firstWhere(
+    _activeWallet ??= _wallets.firstWhere(
         (w) => w.isDefault,
         orElse: () => _wallets.first,
       );
-    }
 
     // Reload balances
     await _loadBalances();

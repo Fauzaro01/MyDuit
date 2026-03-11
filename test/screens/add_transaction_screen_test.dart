@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:myduit/config/app_theme.dart';
 import 'package:myduit/providers/transaction_provider.dart';
 import 'package:myduit/providers/theme_provider.dart';
