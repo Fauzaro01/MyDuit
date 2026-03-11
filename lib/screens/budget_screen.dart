@@ -231,7 +231,9 @@ class BudgetScreen extends StatelessWidget {
   ) {
     final controller = TextEditingController(
       text: currentBudget.monthlyLimit > 0
-          ? currentBudget.monthlyLimit.toStringAsFixed(0)
+          ? (CurrencyInputService.isFormatted
+                ? RupiahInputFormatter.formatNumber(currentBudget.monthlyLimit)
+                : currentBudget.monthlyLimit.toStringAsFixed(0))
           : '',
     );
     final provider = context.read<TransactionProvider>();
@@ -263,7 +265,9 @@ class BudgetScreen extends StatelessWidget {
               TextField(
                 controller: controller,
                 keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: CurrencyInputService.isFormatted
+                    ? [RupiahInputFormatter()]
+                    : [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
                   prefixText: 'Rp ',
                   hintText: '0',
@@ -291,8 +295,8 @@ class BudgetScreen extends StatelessWidget {
             ),
             TextButton(
               onPressed: () {
-                final value = double.tryParse(controller.text);
-                if (value != null && value > 0) {
+                final value = RupiahInputFormatter.parse(controller.text);
+                if (value > 0) {
                   provider.setBudget(
                     BudgetModel(
                       id: currentBudget.monthlyLimit > 0

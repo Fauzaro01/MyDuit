@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CurrencyFormatter {
   static final NumberFormat _formatter = NumberFormat.currency(
@@ -21,6 +23,88 @@ class CurrencyFormatter {
       return 'Rp ${(amount / 1000).toStringAsFixed(1)}Rb';
     }
     return format(amount);
+  }
+}
+
+/// TextInputFormatter that auto-formats amount input as Indonesian Rupiah.
+/// Digits-only; uses dot (.) as thousands separator.
+/// Examples: 1000 → 1.000  |  12000 → 12.000  |  1200300 → 1.200.300
+class RupiahInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Strip all non-digits
+    final digits = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+
+    if (digits.isEmpty) {
+      return newValue.copyWith(
+        text: '',
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+    }
+
+    // Remove leading zeros
+    final stripped = digits.replaceFirst(RegExp(r'^0+'), '');
+    final clean = stripped.isEmpty ? '0' : stripped;
+    final formatted = _addDots(clean);
+
+    return newValue.copyWith(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+
+  /// Add dot separator every 3 digits from right
+  static String _addDots(String digits) {
+    final buf = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) buf.write('.');
+      buf.write(digits[i]);
+    }
+    return buf.toString();
+  }
+
+  /// Strip formatting and parse to double (handles both 1.200 and 1200).
+  static double parse(String text) {
+    final clean = text.replaceAll('.', '').replaceAll(',', '').trim();
+    if (clean.isEmpty) return 0;
+    return double.tryParse(clean) ?? 0;
+  }
+
+  /// Format a double as Rupiah input string for pre-filling text fields.
+  static String formatNumber(double amount) {
+    return _addDots(amount.toStringAsFixed(0));
+  }
+}
+
+/// Service to persist and cache the currency input formatting preference.
+/// Always call [load] at app startup before accessing [isFormatted].
+class CurrencyInputService {
+  static const _prefKey = 'currency_input_formatted';
+
+  /// Cached value — true means use formatted (1.000, 12.000) input.
+  static bool _isFormatted = true; // default ON
+
+  /// Synchronous getter for the cached preference.
+  static bool get isFormatted => _isFormatted;
+
+  /// Load preference from SharedPreferences. Call once at app startup.
+  static Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isFormatted = prefs.getBool(_prefKey) ?? true;
+    } catch (_) {}
+  }
+
+  /// Save and update the cached preference.
+  static Future<void> setFormatted(bool value) async {
+    _isFormatted = value;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefKey, value);
+    } catch (_) {}
   }
 }
 

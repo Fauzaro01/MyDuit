@@ -151,7 +151,9 @@ class _TransferScreenState extends State<TransferScreen> {
             TextFormField(
               controller: _amountController,
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: CurrencyInputService.isFormatted
+                  ? [RupiahInputFormatter()]
+                  : [FilteringTextInputFormatter.digitsOnly],
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
@@ -170,8 +172,7 @@ class _TransferScreenState extends State<TransferScreen> {
                 if (value == null || value.isEmpty) {
                   return 'Masukkan jumlah';
                 }
-                final amount = double.tryParse(value);
-                if (amount == null || amount <= 0) {
+                if (RupiahInputFormatter.parse(value) <= 0) {
                   return 'Jumlah harus lebih dari 0';
                 }
                 return null;
@@ -285,7 +286,7 @@ class _TransferScreenState extends State<TransferScreen> {
       return;
     }
 
-    final amount = double.parse(_amountController.text);
+    final amount = RupiahInputFormatter.parse(_amountController.text);
     final transfer = TransferModel(
       fromWalletId: _fromWallet!.id,
       toWalletId: _toWallet!.id,

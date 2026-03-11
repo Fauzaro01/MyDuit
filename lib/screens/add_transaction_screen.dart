@@ -41,7 +41,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _isEditing = true;
       final tx = widget.transaction!;
       _titleController.text = tx.title;
-      _amountController.text = tx.amount.toStringAsFixed(0);
+      _amountController.text = CurrencyInputService.isFormatted
+          ? RupiahInputFormatter.formatNumber(tx.amount)
+          : tx.amount.toStringAsFixed(0);
       _noteController.text = tx.note ?? '';
       _type = tx.type;
       _category = tx.category;
@@ -159,7 +161,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             TextFormField(
               controller: _amountController,
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: CurrencyInputService.isFormatted
+                  ? [RupiahInputFormatter()]
+                  : [FilteringTextInputFormatter.digitsOnly],
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
@@ -178,8 +182,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 if (value == null || value.isEmpty) {
                   return 'Masukkan jumlah';
                 }
-                if (double.tryParse(value) == null ||
-                    double.parse(value) <= 0) {
+                if (RupiahInputFormatter.parse(value) <= 0) {
                   return 'Jumlah harus lebih dari 0';
                 }
                 return null;
@@ -467,7 +470,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final transaction = TransactionModel(
       id: _isEditing ? widget.transaction!.id : null,
       title: _titleController.text.trim(),
-      amount: double.parse(_amountController.text),
+      amount: RupiahInputFormatter.parse(_amountController.text),
       type: _type,
       category: _category,
       date: _date,
