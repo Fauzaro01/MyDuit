@@ -81,7 +81,7 @@ void main() {
     await db.close();
   });
 
-  TransactionModel _createTransaction({
+  TransactionModel createTransaction({
     String? id,
     String title = 'Test',
     double amount = 50000,
@@ -105,7 +105,7 @@ void main() {
 
   group('Transaction CRUD', () {
     test('insert and retrieve transaction', () async {
-      final tx = _createTransaction(id: 'tx-1', title: 'Makan Siang');
+      final tx = createTransaction(id: 'tx-1', title: 'Makan Siang');
 
       await db.insert(
         'transactions',
@@ -127,7 +127,7 @@ void main() {
     });
 
     test('update transaction', () async {
-      final tx = _createTransaction(id: 'tx-2', title: 'Original');
+      final tx = createTransaction(id: 'tx-2', title: 'Original');
       await db.insert('transactions', tx.toMap());
 
       final updated = tx.copyWith(title: 'Updated', amount: 75000);
@@ -149,7 +149,7 @@ void main() {
     });
 
     test('delete transaction', () async {
-      final tx = _createTransaction(id: 'tx-3');
+      final tx = createTransaction(id: 'tx-3');
       await db.insert('transactions', tx.toMap());
 
       await db.delete('transactions', where: 'id = ?', whereArgs: ['tx-3']);
@@ -163,12 +163,12 @@ void main() {
     });
 
     test('retrieve all transactions ordered by date DESC', () async {
-      final tx1 = _createTransaction(
+      final tx1 = createTransaction(
         id: 'tx-a',
         title: 'Older',
         date: DateTime(2026, 2, 10),
       );
-      final tx2 = _createTransaction(
+      final tx2 = createTransaction(
         id: 'tx-b',
         title: 'Newer',
         date: DateTime(2026, 2, 20),
@@ -187,7 +187,7 @@ void main() {
   group('Transaction queries by month', () {
     setUp(() async {
       // Insert transactions for Feb 2026
-      final txFeb1 = _createTransaction(
+      final txFeb1 = createTransaction(
         id: 'feb-1',
         title: 'Feb Food',
         amount: 30000,
@@ -195,7 +195,7 @@ void main() {
         category: TransactionCategory.food,
         date: DateTime(2026, 2, 5),
       );
-      final txFeb2 = _createTransaction(
+      final txFeb2 = createTransaction(
         id: 'feb-2',
         title: 'Feb Salary',
         amount: 5000000,
@@ -204,7 +204,7 @@ void main() {
         date: DateTime(2026, 2, 10),
       );
       // Insert transaction for Jan 2026
-      final txJan = _createTransaction(
+      final txJan = createTransaction(
         id: 'jan-1',
         title: 'Jan Shopping',
         amount: 100000,
@@ -289,7 +289,7 @@ void main() {
 
     test('getCategoryTotals returns grouped data', () async {
       // Add another food expense in Feb
-      final txFeb3 = _createTransaction(
+      final txFeb3 = createTransaction(
         id: 'feb-3',
         title: 'Feb Food 2',
         amount: 20000,
@@ -325,19 +325,19 @@ void main() {
   group('Search transactions', () {
     setUp(() async {
       final txs = [
-        _createTransaction(
+        createTransaction(
           id: 'search-1',
           title: 'Makan Siang di Warteg',
           date: DateTime(2026, 2, 5),
           note: 'Nasi padang',
         ),
-        _createTransaction(
+        createTransaction(
           id: 'search-2',
           title: 'Beli Kopi',
           date: DateTime(2026, 2, 10),
           note: 'Starbucks',
         ),
-        _createTransaction(
+        createTransaction(
           id: 'search-3',
           title: 'Belanja Bulanan',
           date: DateTime(2026, 2, 15),
@@ -607,17 +607,17 @@ void main() {
   group('Daily totals', () {
     test('getDailyTotals groups by day', () async {
       // Two expense on same day, one on different day
-      final tx1 = _createTransaction(
+      final tx1 = createTransaction(
         id: 'daily-1',
         amount: 20000,
         date: DateTime(2026, 2, 10, 8, 0),
       );
-      final tx2 = _createTransaction(
+      final tx2 = createTransaction(
         id: 'daily-2',
         amount: 30000,
         date: DateTime(2026, 2, 10, 12, 0),
       );
-      final tx3 = _createTransaction(
+      final tx3 = createTransaction(
         id: 'daily-3',
         amount: 50000,
         date: DateTime(2026, 2, 11, 9, 0),
@@ -1034,7 +1034,7 @@ void main() {
 
     test('getWalletBalance calculates income - expense correctly', () async {
       // Add income to default-wallet
-      final inc = _createTransaction(
+      final inc = createTransaction(
         id: 'bal-inc',
         title: 'Gaji',
         amount: 5000000,
@@ -1045,7 +1045,7 @@ void main() {
       await db.insert('transactions', inc.toMap());
 
       // Add expense to default-wallet
-      final exp = _createTransaction(
+      final exp = createTransaction(
         id: 'bal-exp',
         title: 'Makan',
         amount: 200000,
@@ -1072,7 +1072,7 @@ void main() {
 
     test('getWalletBalance includes transfer in/out', () async {
       // Add income to default-wallet
-      final inc = _createTransaction(
+      final inc = createTransaction(
         id: 'trf-inc',
         title: 'Gaji',
         amount: 1000000,
@@ -1309,7 +1309,7 @@ void main() {
       });
 
       // Transactions in default wallet
-      final tx1 = _createTransaction(
+      final tx1 = createTransaction(
         id: 'wtx-1',
         title: 'Gaji',
         amount: 5000000,
@@ -1318,7 +1318,7 @@ void main() {
         date: DateTime(2026, 3, 5),
         walletId: 'default-wallet',
       );
-      final tx2 = _createTransaction(
+      final tx2 = createTransaction(
         id: 'wtx-2',
         title: 'Makan',
         amount: 50000,
@@ -1329,7 +1329,7 @@ void main() {
       );
 
       // Transaction in wallet-b
-      final tx3 = _createTransaction(
+      final tx3 = createTransaction(
         id: 'wtx-3',
         title: 'Investasi',
         amount: 1000000,

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/app_theme.dart';
+import '../utils/formatters.dart';
 import '../providers/theme_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/app_lock_provider.dart';
@@ -186,6 +187,8 @@ class SettingsScreen extends StatelessWidget {
                           : AppColors.primaryLight,
                     ),
                   ),
+                  const Divider(height: 1, indent: 56),
+                  _CurrencyFormatTile(isDark: isDark),
                 ],
               )
               .animate()
@@ -696,9 +699,63 @@ class _SettingsTile extends StatelessWidget {
                 ],
               ),
             ),
-            if (trailing != null) trailing!,
+            ?trailing,
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CurrencyFormatTile extends StatefulWidget {
+  final bool isDark;
+  const _CurrencyFormatTile({required this.isDark});
+
+  @override
+  State<_CurrencyFormatTile> createState() => _CurrencyFormatTileState();
+}
+
+class _CurrencyFormatTileState extends State<_CurrencyFormatTile> {
+  late bool _enabled;
+
+  @override
+  void initState() {
+    super.initState();
+    _enabled = CurrencyInputService.isFormatted;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsTile(
+      icon: Icons.format_list_numbered_rounded,
+      title: 'Format Input Rupiah',
+      subtitle: _enabled
+          ? 'Seperti: 1.000, 12.000, 1.200.300'
+          : 'Angka biasa tanpa titik',
+      trailing: Switch.adaptive(
+        value: _enabled,
+        onChanged: (val) async {
+          await CurrencyInputService.setFormatted(val);
+          setState(() => _enabled = val);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  val
+                      ? 'Format Rupiah diaktifkan'
+                      : 'Format Rupiah dinonaktifkan',
+                ),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            );
+          }
+        },
+        activeColor: widget.isDark
+            ? AppColors.primaryDark
+            : AppColors.primaryLight,
       ),
     );
   }

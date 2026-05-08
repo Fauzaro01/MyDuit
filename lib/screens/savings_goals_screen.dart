@@ -217,7 +217,9 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
                 ),
               ),
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: CurrencyInputService.isFormatted
+                  ? [RupiahInputFormatter()]
+                  : [FilteringTextInputFormatter.digitsOnly],
               autofocus: true,
             ),
             const SizedBox(height: 16),
@@ -226,8 +228,8 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
               height: 52,
               child: FilledButton(
                 onPressed: () {
-                  final amount = double.tryParse(controller.text);
-                  if (amount != null && amount > 0) {
+                  final amount = RupiahInputFormatter.parse(controller.text);
+                  if (amount > 0) {
                     context.read<SavingsProvider>().addAmountToGoal(
                       goal.id,
                       amount,
@@ -521,8 +523,12 @@ class _AddGoalSheetState extends State<_AddGoalSheet> {
     if (widget.existing != null) {
       final g = widget.existing!;
       _titleController.text = g.title;
-      _targetController.text = g.targetAmount.toStringAsFixed(0);
-      _currentController.text = g.currentAmount.toStringAsFixed(0);
+      _targetController.text = CurrencyInputService.isFormatted
+          ? RupiahInputFormatter.formatNumber(g.targetAmount)
+          : g.targetAmount.toStringAsFixed(0);
+      _currentController.text = CurrencyInputService.isFormatted
+          ? RupiahInputFormatter.formatNumber(g.currentAmount)
+          : g.currentAmount.toStringAsFixed(0);
       _emoji = g.emoji;
       _targetDate = g.targetDate;
     } else {
@@ -639,10 +645,12 @@ class _AddGoalSheetState extends State<_AddGoalSheet> {
                 ),
               ),
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: CurrencyInputService.isFormatted
+                  ? [RupiahInputFormatter()]
+                  : [FilteringTextInputFormatter.digitsOnly],
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Masukkan target';
-                if (double.tryParse(v) == null || double.parse(v) <= 0) {
+                if (RupiahInputFormatter.parse(v) <= 0) {
                   return 'Target harus lebih dari 0';
                 }
                 return null;
@@ -662,7 +670,9 @@ class _AddGoalSheetState extends State<_AddGoalSheet> {
                   ),
                 ),
                 keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: CurrencyInputService.isFormatted
+                    ? [RupiahInputFormatter()]
+                    : [FilteringTextInputFormatter.digitsOnly],
               ),
               const SizedBox(height: 12),
             ],
@@ -747,9 +757,9 @@ class _AddGoalSheetState extends State<_AddGoalSheet> {
       id: widget.existing?.id,
       title: _titleController.text.trim(),
       emoji: _emoji,
-      targetAmount: double.parse(_targetController.text),
+      targetAmount: RupiahInputFormatter.parse(_targetController.text),
       currentAmount: _isEditing
-          ? double.tryParse(_currentController.text) ?? 0
+          ? RupiahInputFormatter.parse(_currentController.text)
           : 0,
       createdAt: widget.existing?.createdAt,
       targetDate: _targetDate,
