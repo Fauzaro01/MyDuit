@@ -9,14 +9,20 @@ class ExportService {
     List<TransactionModel> transactions, {
     required int year,
     required int month,
+    Map<String, String>? walletNames,
+    Map<String, String>? customCategoryNames,
   }) async {
     final buffer = StringBuffer();
+    // Prepend UTF-8 BOM for Excel compatibility
+    buffer.write('﻿');
     buffer.writeln('Tanggal,Judul,Kategori,Tipe,Jumlah,Catatan');
 
     for (final tx in transactions) {
       final date = DateFormatter.fullDate(tx.date);
       final title = _escapeCsv(tx.title);
-      final category = tx.category.label;
+      final category = (tx.customCategoryId != null && customCategoryNames != null)
+          ? (customCategoryNames[tx.customCategoryId] ?? tx.category.label)
+          : tx.category.label;
       final type = tx.type == TransactionType.income
           ? 'Pemasukan'
           : 'Pengeluaran';
@@ -38,8 +44,16 @@ class ExportService {
     List<TransactionModel> transactions, {
     required int year,
     required int month,
+    Map<String, String>? walletNames,
+    Map<String, String>? customCategoryNames,
   }) async {
-    final filePath = await exportToCsv(transactions, year: year, month: month);
+    final filePath = await exportToCsv(
+      transactions,
+      year: year,
+      month: month,
+      walletNames: walletNames,
+      customCategoryNames: customCategoryNames,
+    );
 
     await Share.shareXFiles(
       [XFile(filePath)],
@@ -48,7 +62,10 @@ class ExportService {
   }
 
   static String _escapeCsv(String value) {
-    if (value.contains(',') || value.contains('"') || value.contains('\n')) {
+    if (value.contains(',') ||
+        value.contains('"') ||
+        value.contains('\n') ||
+        value.contains('\r')) {
       return '"${value.replaceAll('"', '""')}"';
     }
     return value;

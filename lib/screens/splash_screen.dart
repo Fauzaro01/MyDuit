@@ -12,6 +12,8 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  bool _navigated = false;
+
   @override
   void initState() {
     super.initState();
@@ -20,12 +22,17 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _navigateNext() async {
     await Future.delayed(const Duration(milliseconds: 2400));
-    if (!mounted) return;
+    _proceed();
+  }
+
+  void _proceed() {
+    if (_navigated || !mounted) return;
+    _navigated = true;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => widget.nextScreen,
+        pageBuilder: (_, _, _) => widget.nextScreen,
         transitionDuration: const Duration(milliseconds: 600),
-        transitionsBuilder: (_, animation, __, child) {
+        transitionsBuilder: (_, animation, _, child) {
           return FadeTransition(opacity: animation, child: child);
         },
       ),
@@ -38,7 +45,10 @@ class _SplashScreenState extends State<SplashScreen> {
     final primary = isDark ? AppColors.primaryDark : AppColors.primaryLight;
 
     return Scaffold(
-      body: Center(
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _proceed,
+        child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -93,6 +103,7 @@ class _SplashScreenState extends State<SplashScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 }

@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../models/transaction_model.dart';
+import '../providers/custom_category_provider.dart';
 import '../providers/transaction_provider.dart';
+import '../providers/wallet_provider.dart';
 import '../utils/formatters.dart';
 
 class BalanceCard extends StatelessWidget {
@@ -164,6 +166,19 @@ class TransactionTile extends StatelessWidget {
     final isIncome = transaction.type == TransactionType.income;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final customCatProvider =
+        Provider.of<CustomCategoryProvider?>(context);
+    final customCat = (transaction.customCategoryId != null &&
+            customCatProvider != null)
+        ? customCatProvider.getCategoryById(transaction.customCategoryId!)
+        : null;
+    final iconText = customCat?.emoji ?? transaction.category.icon;
+    final categoryLabel = customCat?.name ?? transaction.category.label;
+
+    final walletProvider = Provider.of<WalletProvider?>(context);
+    final wallet = transaction.walletId != null
+        ? walletProvider?.getWalletById(transaction.walletId!)
+        : null;
 
     return Dismissible(
       key: Key(transaction.id),
@@ -231,7 +246,7 @@ class TransactionTile extends StatelessWidget {
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  transaction.category.icon,
+                  iconText,
                   style: const TextStyle(fontSize: 22),
                 ),
               ),
@@ -248,9 +263,42 @@ class TransactionTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${transaction.category.label} · ${DateFormatter.relative(transaction.date)}',
+                      '$categoryLabel${wallet != null ? " · ${wallet.emoji} ${wallet.name}" : ""} · ${DateFormatter.relative(transaction.date)}',
                       style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                    if (transaction.tags.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 4,
+                        children: transaction.tags.take(3).map((tag) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: (isDark
+                                      ? AppColors.primaryDark
+                                      : AppColors.primaryLight)
+                                  .withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '#$tag',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? AppColors.primaryDark
+                                    : AppColors.primaryLight,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -285,6 +333,7 @@ class MonthSelector extends StatelessWidget {
         IconButton(
           onPressed: () => provider.previousMonth(),
           icon: const Icon(Icons.chevron_left_rounded),
+          tooltip: 'Bulan Sebelumnya',
           style: IconButton.styleFrom(
             backgroundColor: theme.colorScheme.secondary,
           ),
@@ -301,6 +350,7 @@ class MonthSelector extends StatelessWidget {
         IconButton(
           onPressed: () => provider.nextMonth(),
           icon: const Icon(Icons.chevron_right_rounded),
+          tooltip: 'Bulan Berikutnya',
           style: IconButton.styleFrom(
             backgroundColor: theme.colorScheme.secondary,
           ),

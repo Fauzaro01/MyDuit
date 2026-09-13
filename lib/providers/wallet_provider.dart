@@ -20,6 +20,16 @@ class WalletProvider extends ChangeNotifier {
 
   double get totalBalance => _walletBalances.values.fold(0.0, (a, b) => a + b);
 
+  double getTotalConsolidatedBalance(Map<String, double> ratesToIdr) {
+    double sum = 0.0;
+    for (final wallet in _wallets) {
+      final bal = _walletBalances[wallet.id] ?? 0.0;
+      final rate = ratesToIdr[wallet.currencyCode.toUpperCase()] ?? 1.0;
+      sum += (bal * rate);
+    }
+    return sum;
+  }
+
   List<TransferModel> _transfers = [];
   List<TransferModel> get transfers => _transfers;
 
@@ -52,11 +62,18 @@ class WalletProvider extends ChangeNotifier {
       _wallets = [defaultWallet];
     }
 
-    // Set active wallet if not set
-    _activeWallet ??= _wallets.firstWhere(
+    // Refresh active wallet reference from newly loaded list
+    if (_activeWallet != null) {
+      _activeWallet = _wallets.firstWhere(
+        (w) => w.id == _activeWallet!.id,
+        orElse: () => _wallets.firstWhere((w) => w.isDefault, orElse: () => _wallets.first),
+      );
+    } else {
+      _activeWallet = _wallets.firstWhere(
         (w) => w.isDefault,
         orElse: () => _wallets.first,
       );
+    }
 
     // Reload balances
     await _loadBalances();
@@ -107,8 +124,8 @@ class WalletProvider extends ChangeNotifier {
 
   Future<void> deleteWallet(String id) async {
     if (_wallets.length <= 1) return; // Can't delete last wallet
-    final wallet = _wallets.firstWhere((w) => w.id == id);
-    if (wallet.isDefault) return; // Can't delete default wallet
+    final wallet = _wallets.where((w) => w.id == id).firstOrNull;
+    if (wallet == null || wallet.isDefault) return; // Can't delete default wallet or non-existent
 
     await _dbService.deleteWallet(id);
     if (_activeWallet?.id == id) {
@@ -121,12 +138,15 @@ class WalletProvider extends ChangeNotifier {
   // ── Transfer ──
   Future<void> transferBetweenWallets(TransferModel transfer) async {
     await _dbService.insertTransfer(transfer);
+    _transfers.removeWhere((t) => t.id == transfer.id);
+    _transfers.insert(0, transfer);
     await _loadBalances();
     notifyListeners();
   }
 
   Future<void> deleteTransfer(String id) async {
     await _dbService.deleteTransfer(id);
+    _transfers.removeWhere((t) => t.id == id);
     await _loadBalances();
     notifyListeners();
   }

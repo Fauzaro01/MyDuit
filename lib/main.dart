@@ -14,6 +14,11 @@ import 'providers/savings_provider.dart';
 import 'providers/debt_provider.dart';
 import 'providers/app_lock_provider.dart';
 import 'providers/custom_category_provider.dart';
+import 'providers/currency_provider.dart';
+import 'providers/split_bill_provider.dart';
+import 'providers/tag_provider.dart';
+import 'providers/subscription_provider.dart';
+import 'providers/asset_provider.dart';
 import 'services/notification_service.dart';
 import 'services/google_drive_service.dart';
 import 'utils/formatters.dart';
@@ -43,6 +48,11 @@ void main() {
       late DebtProvider debtProvider;
       late AppLockProvider appLockProvider;
       late CustomCategoryProvider customCategoryProvider;
+      late CurrencyProvider currencyProvider;
+      late SplitBillProvider splitBillProvider;
+      late TagProvider tagProvider;
+      late SubscriptionProvider subscriptionProvider;
+      late AssetProvider assetProvider;
 
       try {
         await initializeDateFormatting('id_ID', null);
@@ -72,6 +82,12 @@ void main() {
         appLockProvider = AppLockProvider();
         await appLockProvider.init();
         customCategoryProvider = CustomCategoryProvider();
+        currencyProvider = CurrencyProvider();
+        await currencyProvider.init();
+        splitBillProvider = SplitBillProvider();
+        tagProvider = TagProvider();
+        subscriptionProvider = SubscriptionProvider();
+        assetProvider = AssetProvider();
 
         // Initialize notifications
         try {
@@ -98,6 +114,11 @@ void main() {
         debtProvider = DebtProvider();
         appLockProvider = AppLockProvider();
         customCategoryProvider = CustomCategoryProvider();
+        currencyProvider = CurrencyProvider();
+        splitBillProvider = SplitBillProvider();
+        tagProvider = TagProvider();
+        subscriptionProvider = SubscriptionProvider();
+        assetProvider = AssetProvider();
       }
 
       runApp(
@@ -111,6 +132,11 @@ void main() {
             ChangeNotifierProvider.value(value: debtProvider),
             ChangeNotifierProvider.value(value: appLockProvider),
             ChangeNotifierProvider.value(value: customCategoryProvider),
+            ChangeNotifierProvider.value(value: currencyProvider),
+            ChangeNotifierProvider.value(value: splitBillProvider),
+            ChangeNotifierProvider.value(value: tagProvider),
+            ChangeNotifierProvider.value(value: subscriptionProvider),
+            ChangeNotifierProvider.value(value: assetProvider),
           ],
           child: MyDuitApp(showOnboarding: !onboardingComplete),
         ),
@@ -155,13 +181,48 @@ class _AppEntryGate extends StatefulWidget {
   State<_AppEntryGate> createState() => _AppEntryGateState();
 }
 
-class _AppEntryGateState extends State<_AppEntryGate> {
+class _AppEntryGateState extends State<_AppEntryGate>
+    with WidgetsBindingObserver {
   bool _ready = false;
+  bool _isPromptingUnlock = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final lockProvider = context.read<AppLockProvider>();
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      lockProvider.onAppPaused();
+    } else if (state == AppLifecycleState.resumed) {
+      lockProvider.onAppResumed();
+      if (lockProvider.needsUnlock && !_isPromptingUnlock && mounted) {
+        _promptUnlock();
+      }
+    }
+  }
+
+  Future<void> _promptUnlock() async {
+    _isPromptingUnlock = true;
+    final unlocked = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const PinLockScreen()),
+    );
+    _isPromptingUnlock = false;
+    if (unlocked != true && mounted) {
+      _promptUnlock();
+    }
   }
 
   Future<void> _initialize() async {

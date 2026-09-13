@@ -4,7 +4,10 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../models/debt_model.dart';
+import '../models/transaction_model.dart';
 import '../providers/debt_provider.dart';
+import '../providers/transaction_provider.dart';
+import '../providers/wallet_provider.dart';
 import '../utils/formatters.dart';
 
 class DebtScreen extends StatefulWidget {
@@ -87,7 +90,7 @@ class _DebtScreenState extends State<DebtScreen>
                         emptyMessage: 'Tidak ada hutang 🎉',
                         onAddPayment: (debt) =>
                             _showPaymentSheet(context, debt),
-                        onSettle: (debt) => provider.settleDebt(debt),
+                        onSettle: (debt) => _confirmSettle(context, provider, debt),
                         onEdit: (debt) => _showAddDebtSheet(context, debt),
                         onDelete: (id) => _confirmDelete(context, provider, id),
                       ),
@@ -100,7 +103,7 @@ class _DebtScreenState extends State<DebtScreen>
                         emptyMessage: 'Tidak ada piutang',
                         onAddPayment: (debt) =>
                             _showPaymentSheet(context, debt),
-                        onSettle: (debt) => provider.settleDebt(debt),
+                        onSettle: (debt) => _confirmSettle(context, provider, debt),
                         onEdit: (debt) => _showAddDebtSheet(context, debt),
                         onDelete: (id) => _confirmDelete(context, provider, id),
                       ),
@@ -128,7 +131,34 @@ class _DebtScreenState extends State<DebtScreen>
               provider.deleteDebt(id);
               Navigator.pop(ctx);
             },
-            child: Text('Hapus', style: TextStyle(color: AppColors.expense)),
+            child: const Text('Hapus', style: TextStyle(color: AppColors.expense)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmSettle(BuildContext context, DebtProvider provider, DebtModel debt) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tandai Lunas?'),
+        content: Text(
+          debt.type == DebtType.iOwe
+              ? 'Tandai hutang ke ${debt.personName} sebagai lunas?'
+              : 'Tandai piutang dari ${debt.personName} sebagai lunas?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () {
+              provider.settleDebt(debt);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Lunas', style: TextStyle(color: AppColors.income)),
           ),
         ],
       ),
@@ -150,91 +180,229 @@ class _DebtScreenState extends State<DebtScreen>
   }
 
   void _showPaymentSheet(BuildContext context, DebtModel debt) {
-    final controller = TextEditingController();
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          MediaQuery.of(ctx).viewInsets.bottom + 20,
-        ),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: theme.dividerColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+      builder: (_) => _DebtPaymentSheet(debt: debt),
+    );
+  }
+}
+
+// ── Debt Payment Bottom Sheet ────────────────────────────────
+class _DebtPaymentSheet extends StatefulWidget {
+  final DebtModel debt;
+  const _DebtPaymentSheet({required this.debt});
+
+  @override
+  State<_DebtPaymentSheet> createState() => _DebtPaymentSheetState();
+}
+
+class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
+  final _controller = TextEditingController();
+  bool _syncWallet = true;
+  String? _selectedWalletId;
+
+  @override
+  void initState() {
+    super.initState();
+    final walletProvider = Provider.of<WalletProvider?>(context, listen: false);
+    final wallets = walletProvider?.wallets ?? [];
+    if (wallets.isNotEmpty) {
+      _selectedWalletId = walletProvider?.activeWallet?.id ?? wallets.first.id;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final walletProvider = Provider.of<WalletProvider?>(context);
+    final wallets = walletProvider?.wallets ?? [];
+    final isIOwe = widget.debt.type == DebtType.iOwe;
+
+    final bottomPadding = MediaQuery.of(context).viewInsets.bottom +
+        MediaQuery.paddingOf(context).bottom +
+        20;
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, bottomPadding),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: theme.dividerColor,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(height: 20),
-            Text('Catat Pembayaran', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 8),
-            Text(
-              '${debt.type.emoji} ${debt.personName} · '
-              'Sisa ${CurrencyFormatter.format(debt.remainingAmount)}',
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: controller,
-              decoration: InputDecoration(
-                labelText: 'Jumlah Bayar',
-                prefixIcon: const Icon(Icons.payments_rounded, size: 20),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
+          ),
+          const SizedBox(height: 20),
+          Text('Catat Pembayaran', style: theme.textTheme.titleLarge),
+          const SizedBox(height: 8),
+          Text(
+            '${widget.debt.type.emoji} ${widget.debt.personName} · '
+            'Sisa ${CurrencyFormatter.format(widget.debt.remainingAmount)}',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _controller,
+            decoration: InputDecoration(
+              labelText: 'Jumlah Bayar',
+              prefixText: CurrencyInputService.isFormatted ? 'Rp ' : null,
+              prefixIcon: const Icon(Icons.payments_rounded, size: 20),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              autofocus: true,
             ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: FilledButton(
-                onPressed: () {
-                  final amount = double.tryParse(controller.text);
-                  if (amount != null && amount > 0) {
-                    context.read<DebtProvider>().addPayment(debt.id, amount);
-                    Navigator.pop(ctx);
-                  }
-                },
-                style: FilledButton.styleFrom(
-                  backgroundColor: isDark
-                      ? AppColors.primaryDark
-                      : AppColors.primaryLight,
-                  foregroundColor: isDark ? Colors.black : Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+            keyboardType: TextInputType.number,
+            inputFormatters: CurrencyInputService.isFormatted
+                ? [
+                    FilteringTextInputFormatter.digitsOnly,
+                    RupiahInputFormatter(),
+                  ]
+                : [FilteringTextInputFormatter.digitsOnly],
+            autofocus: true,
+          ),
+          if (wallets.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: Checkbox(
+                    value: _syncWallet,
+                    onChanged: (v) => setState(() => _syncWallet = v ?? false),
+                    activeColor: theme.colorScheme.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
                   ),
                 ),
-                child: const Text(
-                  'Bayar',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _syncWallet = !_syncWallet),
+                    child: Text(
+                      isIOwe
+                          ? 'Potong dari saldo dompet'
+                          : 'Tambah ke saldo dompet',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_syncWallet) ...[
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _selectedWalletId,
+                decoration: InputDecoration(
+                  labelText: 'Pilih Dompet',
+                  prefixIcon: const Icon(Icons.account_balance_wallet_rounded, size: 20),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                ),
+                items: wallets.map((w) {
+                  final bal = walletProvider?.walletBalances[w.id] ?? 0.0;
+                  return DropdownMenuItem(
+                    value: w.id,
+                    child: Text(
+                      '${w.emoji} ${w.name} (${CurrencyFormatter.formatCompact(bal)})',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (val) => setState(() => _selectedWalletId = val),
+              ),
+            ],
+          ],
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: FilledButton(
+              onPressed: _savePayment,
+              style: FilledButton.styleFrom(
+                backgroundColor: isDark
+                    ? AppColors.primaryDark
+                    : AppColors.primaryLight,
+                foregroundColor: isDark ? Colors.black : Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
+              child: const Text(
+                'Bayar',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+  }
+
+  void _savePayment() async {
+    final amount = RupiahInputFormatter.parse(_controller.text);
+    if (amount <= 0) return;
+
+    final paymentAmount = amount.clamp(0.0, widget.debt.remainingAmount);
+    final debtProvider = context.read<DebtProvider>();
+    final txProvider = Provider.of<TransactionProvider?>(context, listen: false);
+    final walletProvider = Provider.of<WalletProvider?>(context, listen: false);
+
+    await debtProvider.addPayment(widget.debt.id, paymentAmount);
+
+    if (_syncWallet && _selectedWalletId != null) {
+      final isIOwe = widget.debt.type == DebtType.iOwe;
+
+      if (txProvider != null) {
+        await txProvider.addTransaction(
+          TransactionModel(
+            title: isIOwe
+                ? 'Bayar Hutang: ${widget.debt.personName}'
+                : 'Terima Piutang: ${widget.debt.personName}',
+            amount: paymentAmount,
+            type: isIOwe ? TransactionType.expense : TransactionType.income,
+            category: isIOwe ? TransactionCategory.bills : TransactionCategory.other,
+            walletId: _selectedWalletId,
+            date: DateTime.now(),
+            note: isIOwe
+                ? 'Pembayaran hutang ke ${widget.debt.personName}'
+                : 'Penerimaan piutang dari ${widget.debt.personName}',
+          ),
+        );
+        await walletProvider?.refreshBalances();
+      }
+    }
+
+    if (mounted) {
+      Navigator.pop(context);
+    }
   }
 }
 
@@ -271,7 +439,7 @@ class _DebtSummary extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   CurrencyFormatter.formatCompact(totalIOwe),
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
                     color: AppColors.expense,
@@ -288,7 +456,7 @@ class _DebtSummary extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   CurrencyFormatter.formatCompact(totalOwedToMe),
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
                     color: AppColors.income,
@@ -306,7 +474,7 @@ class _DebtSummary extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     '$overdueCount',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
                       color: Colors.orange,
@@ -632,7 +800,12 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
       child: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            MediaQuery.paddingOf(context).bottom + 32,
+          ),
           shrinkWrap: true,
           children: [
             Center(
@@ -720,8 +893,8 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
               ),
               keyboardType: TextInputType.number,
               inputFormatters: CurrencyInputService.isFormatted
-                  ? [RupiahInputFormatter()]
-                  : [FilteringTextInputFormatter.digitsOnly],
+                ? [RupiahInputFormatter()]
+                : [FilteringTextInputFormatter.digitsOnly],
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Masukkan jumlah';
                 if (RupiahInputFormatter.parse(v) <= 0) {

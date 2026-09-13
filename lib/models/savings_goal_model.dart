@@ -28,7 +28,8 @@ class SavingsGoalModel {
   double get remainingAmount =>
       (targetAmount - currentAmount).clamp(0.0, double.infinity);
 
-  bool get isReached => currentAmount >= targetAmount;
+  bool get isReached =>
+      isCompleted || (targetAmount > 0 && currentAmount >= targetAmount);
 
   /// Estimate days remaining based on average daily saving
   int? get estimatedDaysRemaining {

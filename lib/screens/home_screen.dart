@@ -8,6 +8,7 @@ import '../widgets/common_widgets.dart';
 import '../widgets/insights_widget.dart';
 import '../widgets/transaction_detail_sheet.dart';
 import 'add_transaction_screen.dart';
+import 'transfer_screen.dart';
 import 'wallet_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -16,8 +17,16 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TransactionProvider>();
+    final walletProvider = context.watch<WalletProvider>();
     final theme = Theme.of(context);
-    final recentTransactions = provider.transactions.take(5).toList();
+
+    var transactions = provider.transactions;
+    if (!walletProvider.showAllWallets && walletProvider.activeWallet != null) {
+      transactions = transactions
+          .where((t) => t.walletId == walletProvider.activeWallet!.id)
+          .toList();
+    }
+    final recentTransactions = transactions.take(5).toList();
 
     return SafeArea(
       child: CustomScrollView(
@@ -70,7 +79,7 @@ class HomeScreen extends StatelessWidget {
                                   _openAddTransaction(context, isIncome: true),
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: _QuickActionButton(
                               label: 'Pengeluaran',
@@ -78,6 +87,15 @@ class HomeScreen extends StatelessWidget {
                               color: AppColors.expense,
                               onTap: () =>
                                   _openAddTransaction(context, isIncome: false),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _QuickActionButton(
+                              label: 'Transfer',
+                              icon: Icons.swap_horiz_rounded,
+                              color: theme.colorScheme.primary,
+                              onTap: () => _openTransfer(context),
                             ),
                           ),
                         ],
@@ -111,7 +129,7 @@ class HomeScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               sliver: SliverList.separated(
                 itemCount: recentTransactions.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final tx = recentTransactions[index];
                   return TransactionTile(
@@ -143,9 +161,15 @@ class HomeScreen extends StatelessWidget {
   }
 
   String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Selamat Pagi 👋';
-    if (hour < 17) return 'Selamat Siang 👋';
+    final now = DateTime.now();
+    final hour = now.hour;
+    final minute = now.minute;
+
+    if (hour >= 4 && hour < 11) return 'Selamat Pagi 👋';
+    if (hour >= 11 && hour < 15) return 'Selamat Siang 👋';
+    if (hour >= 15 && (hour < 18 || (hour == 18 && minute < 30))) {
+      return 'Selamat Sore 👋';
+    }
     return 'Selamat Malam 👋';
   }
 
@@ -154,6 +178,15 @@ class HomeScreen extends StatelessWidget {
       context,
       MaterialPageRoute(
         builder: (_) => AddTransactionScreen(initialIsIncome: isIncome),
+      ),
+    );
+  }
+
+  void _openTransfer(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const TransferScreen(),
       ),
     );
   }
@@ -183,8 +216,9 @@ class _QuickActionButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Row(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
@@ -195,14 +229,16 @@ class _QuickActionButton extends StatelessWidget {
                 ),
                 child: Icon(icon, color: color, size: 18),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(height: 6),
               Text(
                 label,
                 style: TextStyle(
                   color: color,
                   fontWeight: FontWeight.w600,
-                  fontSize: 14,
+                  fontSize: 12,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -216,8 +252,7 @@ class _WalletChipBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final walletProvider = context.watch<WalletProvider>();
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (walletProvider.wallets.isEmpty) return const SizedBox.shrink();
 

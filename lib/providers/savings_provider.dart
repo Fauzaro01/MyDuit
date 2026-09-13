@@ -20,14 +20,20 @@ class SavingsProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  SavingsProvider() {
+    loadGoals();
+  }
+
   Future<void> loadGoals() async {
     _isLoading = true;
     notifyListeners();
 
-    _goals = await _dbService.getAllSavingsGoals();
-
-    _isLoading = false;
-    notifyListeners();
+    try {
+      _goals = await _dbService.getAllSavingsGoals();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> addGoal(SavingsGoalModel goal) async {
@@ -46,7 +52,15 @@ class SavingsProvider extends ChangeNotifier {
   }
 
   Future<void> addAmountToGoal(String goalId, double amount) async {
+    if (amount <= 0) return;
     await _dbService.addToSavingsGoal(goalId, amount);
+    final goal = _goals.where((g) => g.id == goalId).firstOrNull;
+    if (goal != null && (goal.currentAmount + amount >= goal.targetAmount) && !goal.isCompleted) {
+      await _dbService.updateSavingsGoal(goal.copyWith(
+        currentAmount: goal.currentAmount + amount,
+        isCompleted: true,
+      ));
+    }
     await loadGoals();
   }
 

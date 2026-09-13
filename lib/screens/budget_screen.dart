@@ -5,9 +5,28 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../models/budget_model.dart';
 import '../models/transaction_model.dart';
+import '../providers/custom_category_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../utils/formatters.dart';
 import '../widgets/common_widgets.dart';
+
+class _BudgetItem {
+  final TransactionCategory category;
+  final String? customCategoryId;
+  final String name;
+  final String icon;
+  final double spent;
+  final BudgetModel budget;
+
+  const _BudgetItem({
+    required this.category,
+    this.customCategoryId,
+    required this.name,
+    required this.icon,
+    required this.spent,
+    required this.budget,
+  });
+}
 
 class BudgetScreen extends StatelessWidget {
   const BudgetScreen({super.key});
@@ -15,23 +34,27 @@ class BudgetScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TransactionProvider>();
+    final customCatProvider = Provider.of<CustomCategoryProvider?>(context);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Only expense categories for budgets
+    // Standard expense categories for budgets
     final expenseCategories = TransactionCategory.values
         .where((c) => !c.isIncomeCategory)
         .toList();
 
+    // Custom expense categories
+    final customExpenseCats = customCatProvider?.expenseCategories ?? [];
+
     final budgets = provider.budgets;
     final expenseTotals = provider.expenseCategoryTotals;
+    final customExpenseTotals = provider.expenseCustomTotals;
 
-    // Calculate total budget vs total spent
-    double totalBudget = 0;
-    double totalSpent = 0;
+    final List<_BudgetItem> budgetItems = [];
+
     for (final cat in expenseCategories) {
       final budget = budgets.firstWhere(
-        (b) => b.category == cat,
+        (b) => b.category == cat && b.customCategoryId == null,
         orElse: () => BudgetModel(
           category: cat,
           monthlyLimit: 0,
@@ -39,8 +62,45 @@ class BudgetScreen extends StatelessWidget {
           month: provider.selectedMonth,
         ),
       );
-      totalBudget += budget.monthlyLimit;
-      totalSpent += expenseTotals[cat] ?? 0;
+      final spent = expenseTotals[cat] ?? 0;
+      budgetItems.add(_BudgetItem(
+        category: cat,
+        customCategoryId: null,
+        name: cat.label,
+        icon: cat.icon,
+        spent: spent,
+        budget: budget,
+      ));
+    }
+
+    for (final customCat in customExpenseCats) {
+      final budget = budgets.firstWhere(
+        (b) => b.customCategoryId == customCat.id,
+        orElse: () => BudgetModel(
+          category: TransactionCategory.other,
+          customCategoryId: customCat.id,
+          monthlyLimit: 0,
+          year: provider.selectedYear,
+          month: provider.selectedMonth,
+        ),
+      );
+      final spent = customExpenseTotals[customCat.id] ?? 0;
+      budgetItems.add(_BudgetItem(
+        category: TransactionCategory.other,
+        customCategoryId: customCat.id,
+        name: customCat.name,
+        icon: customCat.emoji,
+        spent: spent,
+        budget: budget,
+      ));
+    }
+
+    // Calculate total budget vs total spent
+    double totalBudget = 0;
+    double totalSpent = 0;
+    for (final item in budgetItems) {
+      totalBudget += item.budget.monthlyLimit;
+      totalSpent += item.spent;
     }
 
     return Scaffold(
@@ -164,39 +224,40 @@ class BudgetScreen extends StatelessWidget {
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             sliver: SliverList.separated(
-              itemCount: expenseCategories.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemCount: budgetItems.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
-                final cat = expenseCategories[index];
-                final spent = expenseTotals[cat] ?? 0;
-                final budget = budgets.firstWhere(
-                  (b) => b.category == cat,
-                  orElse: () => BudgetModel(
-                    category: cat,
-                    monthlyLimit: 0,
-                    year: provider.selectedYear,
-                    month: provider.selectedMonth,
-                  ),
-                );
+                final item = budgetItems[index];
 
                 return _BudgetCategoryTile(
-                      category: cat,
-                      spent: spent,
-                      budget: budget,
+                      name: item.name,
+                      icon: item.icon,
+                      spent: item.spent,
+                      budget: item.budget,
                       isDark: isDark,
-                      onSetBudget: () =>
-                          _showSetBudgetDialog(context, cat, budget),
+                      onSetBudget: () => _showSetBudgetDialog(
+                        context,
+                        item.name,
+                        item.icon,
+                        item.category,
+                        item.customCategoryId,
+                        item.budget,
+                      ),
                     )
                     .animate()
                     .fadeIn(
-                      delay: Duration(milliseconds: 60 * index),
-                      duration: 400.ms,
+                      delay: Duration(milliseconds: 40 * index),
+                      duration: 350.ms,
                     )
                     .slideX(begin: 0.04, end: 0);
               },
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 100 + MediaQuery.paddingOf(context).bottom,
+            ),
+          ),
         ],
       ),
     );
@@ -226,7 +287,10 @@ class BudgetScreen extends StatelessWidget {
 
   void _showSetBudgetDialog(
     BuildContext context,
+    String name,
+    String icon,
     TransactionCategory category,
+    String? customCategoryId,
     BudgetModel currentBudget,
   ) {
     final controller = TextEditingController(
@@ -236,84 +300,112 @@ class BudgetScreen extends StatelessWidget {
                 : currentBudget.monthlyLimit.toStringAsFixed(0))
           : '',
     );
+    bool isRollover = currentBudget.isRollover;
     final provider = context.read<TransactionProvider>();
 
     showDialog(
       context: context,
       builder: (context) {
         final theme = Theme.of(context);
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Row(
-            children: [
-              Text(category.icon, style: const TextStyle(fontSize: 24)),
-              const SizedBox(width: 10),
-              Text('Anggaran ${category.label}'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Tetapkan batas pengeluaran bulanan untuk kategori ini.',
-                style: theme.textTheme.bodyMedium,
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                inputFormatters: CurrencyInputService.isFormatted
-                    ? [RupiahInputFormatter()]
-                    : [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  prefixText: 'Rp ',
-                  hintText: '0',
-                  labelText: 'Batas Anggaran',
-                ),
-                autofocus: true,
-              ),
-            ],
-          ),
-          actions: [
-            if (currentBudget.monthlyLimit > 0)
-              TextButton(
-                onPressed: () {
-                  provider.deleteBudget(currentBudget.id);
-                  Navigator.pop(context);
-                },
-                child: const Text(
-                  'Hapus',
-                  style: TextStyle(color: AppColors.expense),
-                ),
-              ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Batal'),
-            ),
-            TextButton(
-              onPressed: () {
-                final value = RupiahInputFormatter.parse(controller.text);
-                if (value > 0) {
-                  provider.setBudget(
-                    BudgetModel(
-                      id: currentBudget.monthlyLimit > 0
-                          ? currentBudget.id
-                          : null,
-                      category: category,
-                      monthlyLimit: value,
-                      year: provider.selectedYear,
-                      month: provider.selectedMonth,
+              title: Row(
+                children: [
+                  Text(icon, style: const TextStyle(fontSize: 24)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Anggaran $name',
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  );
-                }
-                Navigator.pop(context);
-              },
-              child: const Text('Simpan'),
-            ),
-          ],
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tetapkan batas pengeluaran bulanan untuk kategori ini.',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: CurrencyInputService.isFormatted
+                        ? [RupiahInputFormatter()]
+                        : [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      prefixText: 'Rp ',
+                      hintText: '0',
+                      labelText: 'Batas Anggaran',
+                    ),
+                    autofocus: true,
+                  ),
+                  const SizedBox(height: 14),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      'Smart Rollover',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: const Text(
+                      'Bawa sisa surplus anggaran bulan lalu ke bulan ini',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    value: isRollover,
+                    onChanged: (val) => setModalState(() => isRollover = val),
+                  ),
+                ],
+              ),
+              actions: [
+                if (currentBudget.monthlyLimit > 0)
+                  TextButton(
+                    onPressed: () {
+                      provider.deleteBudget(currentBudget.id);
+                      Navigator.pop(context);
+                    },
+                    child: const Text(
+                      'Hapus',
+                      style: TextStyle(color: AppColors.expense),
+                    ),
+                  ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Batal'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final value = RupiahInputFormatter.parse(controller.text);
+                    if (value > 0) {
+                      provider.setBudget(
+                        BudgetModel(
+                          id: currentBudget.monthlyLimit > 0
+                              ? currentBudget.id
+                              : null,
+                          category: category,
+                          customCategoryId: customCategoryId,
+                          monthlyLimit: value,
+                          year: provider.selectedYear,
+                          month: provider.selectedMonth,
+                          isRollover: isRollover,
+                        ),
+                      );
+                    } else if (currentBudget.monthlyLimit > 0) {
+                      provider.deleteBudget(currentBudget.id);
+                    }
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Simpan'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -321,14 +413,16 @@ class BudgetScreen extends StatelessWidget {
 }
 
 class _BudgetCategoryTile extends StatelessWidget {
-  final TransactionCategory category;
+  final String name;
+  final String icon;
   final double spent;
   final BudgetModel budget;
   final bool isDark;
   final VoidCallback onSetBudget;
 
   const _BudgetCategoryTile({
-    required this.category,
+    required this.name,
+    required this.icon,
     required this.spent,
     required this.budget,
     required this.isDark,
@@ -374,7 +468,7 @@ class _BudgetCategoryTile extends StatelessWidget {
                   ),
                   alignment: Alignment.center,
                   child: Text(
-                    category.icon,
+                    icon,
                     style: const TextStyle(fontSize: 22),
                   ),
                 ),
@@ -383,11 +477,36 @@ class _BudgetCategoryTile extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        category.label,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontSize: 14,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              name,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontSize: 14,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (budget.isRollover) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.blueAccent.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'Rollover',
+                                style: TextStyle(
+                                  color: Colors.blueAccent,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 2),
                       Text(

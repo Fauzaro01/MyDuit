@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
+import '../providers/custom_category_provider.dart';
+import '../providers/debt_provider.dart';
+import '../providers/recurring_provider.dart';
+import '../providers/savings_provider.dart';
+import '../providers/transaction_provider.dart';
+import '../providers/wallet_provider.dart';
 import '../services/google_drive_service.dart';
 
 class BackupScreen extends StatefulWidget {
@@ -87,7 +94,7 @@ class _BackupScreenState extends State<BackupScreen> {
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error ?? 'Gagal login'),
+          content: Text(error),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 5),
           shape: RoundedRectangleBorder(
@@ -137,28 +144,33 @@ class _BackupScreenState extends State<BackupScreen> {
       _isLoading = true;
       _statusMessage = null;
     });
-    final result = await GoogleDriveService.backup();
-    setState(() {
-      _isLoading = false;
-      _statusMessage = result.message;
-      if (result.success) {
-        _lastBackup = result.timestamp;
-      }
-    });
+    try {
+      final result = await GoogleDriveService.backup();
+      setState(() {
+        _statusMessage = result.message;
+        if (result.success) {
+          _lastBackup = result.timestamp;
+        }
+      });
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.message),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            backgroundColor: result.success
+                ? AppColors.income
+                : AppColors.expense,
           ),
-          backgroundColor: result.success
-              ? AppColors.income
-              : AppColors.expense,
-        ),
-      );
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -191,25 +203,40 @@ class _BackupScreenState extends State<BackupScreen> {
       _isLoading = true;
       _statusMessage = null;
     });
-    final result = await GoogleDriveService.restore();
-    setState(() {
-      _isLoading = false;
-      _statusMessage = result.message;
-    });
+    try {
+      final result = await GoogleDriveService.restore();
+      if (result.success && mounted) {
+        await Future.wait([
+          context.read<TransactionProvider>().loadData(),
+          context.read<WalletProvider>().loadWallets(),
+          context.read<SavingsProvider>().loadGoals(),
+          context.read<DebtProvider>().loadDebts(),
+          context.read<RecurringProvider>().loadRecurringTransactions(),
+          context.read<CustomCategoryProvider>().loadCategories(),
+        ]);
+      }
+      setState(() {
+        _statusMessage = result.message;
+      });
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.message),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            backgroundColor: result.success
+                ? AppColors.income
+                : AppColors.expense,
           ),
-          backgroundColor: result.success
-              ? AppColors.income
-              : AppColors.expense,
-        ),
-      );
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -221,7 +248,12 @@ class _BackupScreenState extends State<BackupScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Backup & Restore')),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          MediaQuery.paddingOf(context).bottom + 24,
+        ),
         children: [
           // Google account section
           Container(
@@ -439,34 +471,44 @@ class _BackupScreenState extends State<BackupScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _ScheduleOption(
-                        title: 'Tidak Aktif',
-                        subtitle: 'Backup manual saja',
-                        icon: Icons.cancel_outlined,
-                        value: BackupSchedule.none,
+                      RadioGroup<BackupSchedule>(
                         groupValue: _schedule,
-                        onChanged: _changeSchedule,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 8),
-                      _ScheduleOption(
-                        title: 'Mingguan',
-                        subtitle: 'Setiap 7 hari sekali',
-                        icon: Icons.date_range_rounded,
-                        value: BackupSchedule.weekly,
-                        groupValue: _schedule,
-                        onChanged: _changeSchedule,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 8),
-                      _ScheduleOption(
-                        title: 'Bulanan',
-                        subtitle: 'Setiap 30 hari sekali',
-                        icon: Icons.calendar_month_rounded,
-                        value: BackupSchedule.monthly,
-                        groupValue: _schedule,
-                        onChanged: _changeSchedule,
-                        isDark: isDark,
+                        onChanged: (val) {
+                          if (val != null) _changeSchedule(val);
+                        },
+                        child: Column(
+                          children: [
+                            _ScheduleOption(
+                              title: 'Tidak Aktif',
+                              subtitle: 'Backup manual saja',
+                              icon: Icons.cancel_outlined,
+                              value: BackupSchedule.none,
+                              selected: _schedule == BackupSchedule.none,
+                              onTap: () => _changeSchedule(BackupSchedule.none),
+                              isDark: isDark,
+                            ),
+                            const SizedBox(height: 8),
+                            _ScheduleOption(
+                              title: 'Mingguan',
+                              subtitle: 'Setiap 7 hari sekali',
+                              icon: Icons.date_range_rounded,
+                              value: BackupSchedule.weekly,
+                              selected: _schedule == BackupSchedule.weekly,
+                              onTap: () => _changeSchedule(BackupSchedule.weekly),
+                              isDark: isDark,
+                            ),
+                            const SizedBox(height: 8),
+                            _ScheduleOption(
+                              title: 'Bulanan',
+                              subtitle: 'Setiap 30 hari sekali',
+                              icon: Icons.calendar_month_rounded,
+                              value: BackupSchedule.monthly,
+                              selected: _schedule == BackupSchedule.monthly,
+                              onTap: () => _changeSchedule(BackupSchedule.monthly),
+                              isDark: isDark,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -645,8 +687,8 @@ class _ScheduleOption extends StatelessWidget {
   final String subtitle;
   final IconData icon;
   final BackupSchedule value;
-  final BackupSchedule groupValue;
-  final ValueChanged<BackupSchedule?> onChanged;
+  final bool selected;
+  final VoidCallback onTap;
   final bool isDark;
 
   const _ScheduleOption({
@@ -654,21 +696,20 @@ class _ScheduleOption extends StatelessWidget {
     required this.subtitle,
     required this.icon,
     required this.value,
-    required this.groupValue,
-    required this.onChanged,
+    required this.selected,
+    required this.onTap,
     required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    final selected = value == groupValue;
     final primary = isDark ? AppColors.primaryDark : AppColors.primaryLight;
 
     return Material(
       color: selected ? primary.withValues(alpha: 0.08) : Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        onTap: () => onChanged(value),
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -704,9 +745,6 @@ class _ScheduleOption extends StatelessWidget {
               ),
               Radio<BackupSchedule>(
                 value: value,
-                groupValue: groupValue,
-                onChanged: onChanged,
-                activeColor: primary,
               ),
             ],
           ),

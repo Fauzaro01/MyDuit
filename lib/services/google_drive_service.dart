@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'database_service.dart';
 
 /// Backup schedule options
 enum BackupSchedule { none, weekly, monthly }
@@ -283,7 +284,9 @@ class GoogleDriveService {
       '?q=name%3D%27$_folderName%27%20and%20mimeType%3D%27application/vnd.google-apps.folder%27%20and%20trashed%3Dfalse'
       '&fields=files(id,name)',
     );
-    final searchResp = await http.get(searchUrl, headers: headers);
+    final searchResp = await http
+        .get(searchUrl, headers: headers)
+        .timeout(const Duration(seconds: 30));
 
     if (searchResp.statusCode == 200) {
       final data = jsonDecode(searchResp.body);
@@ -294,14 +297,16 @@ class GoogleDriveService {
     }
 
     final createUrl = Uri.parse('https://www.googleapis.com/drive/v3/files');
-    final createResp = await http.post(
-      createUrl,
-      headers: {...headers, 'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'name': _folderName,
-        'mimeType': 'application/vnd.google-apps.folder',
-      }),
-    );
+    final createResp = await http
+        .post(
+          createUrl,
+          headers: {...headers, 'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'name': _folderName,
+            'mimeType': 'application/vnd.google-apps.folder',
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
 
     if (createResp.statusCode == 200) {
       return jsonDecode(createResp.body)['id'] as String;
@@ -329,6 +334,9 @@ class GoogleDriveService {
         );
       }
 
+      // Checkpoint WAL before backing up
+      await DatabaseService().checkpointWal();
+
       final folderId = await _getOrCreateFolder(headers);
       if (folderId == null) {
         return BackupResult(
@@ -346,11 +354,13 @@ class GoogleDriveService {
           'https://www.googleapis.com/upload/drive/v3/files/$existingId'
           '?uploadType=media',
         );
-        final resp = await http.patch(
-          updateUrl,
-          headers: {...headers, 'Content-Type': 'application/octet-stream'},
-          body: dbBytes,
-        );
+        final resp = await http
+            .patch(
+              updateUrl,
+              headers: {...headers, 'Content-Type': 'application/octet-stream'},
+              body: dbBytes,
+            )
+            .timeout(const Duration(seconds: 45));
         if (resp.statusCode != 200) {
           return BackupResult(
             success: false,
@@ -364,7 +374,7 @@ class GoogleDriveService {
           'description': 'MyDuit backup ${now.toIso8601String()}',
         });
 
-        final boundary = '===myduit_boundary===';
+        final boundary = 'myduit_boundary_${now.millisecondsSinceEpoch}';
         final body =
             '--$boundary\r\n'
             'Content-Type: application/json; charset=UTF-8\r\n\r\n'
@@ -438,7 +448,9 @@ class GoogleDriveService {
       final downloadUrl = Uri.parse(
         'https://www.googleapis.com/drive/v3/files/$fileId?alt=media',
       );
-      final resp = await http.get(downloadUrl, headers: headers);
+      final resp = await http
+          .get(downloadUrl, headers: headers)
+          .timeout(const Duration(seconds: 45));
 
       if (resp.statusCode != 200) {
         return BackupResult(
@@ -447,13 +459,19 @@ class GoogleDriveService {
         );
       }
 
+      // Close active database handle before overwriting file
+      await DatabaseService().closeDatabase();
+
       final dbPath = join(await getDatabasesPath(), 'myduit.db');
       final dbFile = File(dbPath);
       await dbFile.writeAsBytes(resp.bodyBytes);
 
+      // Reopen database and verify schema migrations
+      await DatabaseService().database;
+
       return BackupResult(
         success: true,
-        message: 'Restore berhasil! Restart aplikasi untuk menerapkan.',
+        message: 'Restore berhasil! Data telah diperbarui.',
         timestamp: DateTime.now(),
       );
     } catch (e) {

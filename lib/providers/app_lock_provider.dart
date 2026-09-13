@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:local_auth_android/local_auth_android.dart';
 
 class AppLockProvider extends ChangeNotifier {
   static const _pinKey = 'app_lock_pin';
   static const _lockEnabledKey = 'app_lock_enabled';
   static const _fingerprintEnabledKey = 'fingerprint_enabled';
+  static const _lockTimeoutKey = 'app_lock_timeout_seconds';
 
   String? _pin;
   bool _isLockEnabled = false;
   bool _isUnlocked = false;
   bool _isFingerprintEnabled = false;
   bool _isFingerprintAvailable = false;
+  int _lockTimeoutSeconds = 0; // 0 = Langsung
+  DateTime? _pausedAt;
 
   final LocalAuthentication _localAuth = LocalAuthentication();
 
@@ -22,6 +24,7 @@ class AppLockProvider extends ChangeNotifier {
   bool get needsUnlock => _isLockEnabled && !_isUnlocked;
   bool get isFingerprintEnabled => _isFingerprintEnabled;
   bool get isFingerprintAvailable => _isFingerprintAvailable;
+  int get lockTimeoutSeconds => _lockTimeoutSeconds;
 
   /// Fingerprint can be toggled only if PIN is set and biometric hardware exists
   bool get canEnableFingerprint => _isLockEnabled && _isFingerprintAvailable;
@@ -31,6 +34,7 @@ class AppLockProvider extends ChangeNotifier {
     _pin = prefs.getString(_pinKey);
     _isLockEnabled = prefs.getBool(_lockEnabledKey) ?? false;
     _isFingerprintEnabled = prefs.getBool(_fingerprintEnabledKey) ?? false;
+    _lockTimeoutSeconds = prefs.getInt(_lockTimeoutKey) ?? 0;
     _isUnlocked = !_isLockEnabled; // Auto-unlock if lock is disabled
 
     // Check biometric availability
@@ -90,6 +94,27 @@ class AppLockProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setLockTimeout(int seconds) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_lockTimeoutKey, seconds);
+    _lockTimeoutSeconds = seconds;
+    notifyListeners();
+  }
+
+  void onAppPaused() {
+    _pausedAt = DateTime.now();
+  }
+
+  void onAppResumed() {
+    if (_isLockEnabled && _pausedAt != null) {
+      final elapsed = DateTime.now().difference(_pausedAt!).inSeconds;
+      if (elapsed >= _lockTimeoutSeconds) {
+        lock();
+      }
+      _pausedAt = null;
+    }
+  }
+
   /// Authenticate using fingerprint — returns true if successful
   Future<bool> authenticateWithFingerprint() async {
     if (!_isFingerprintEnabled || !_isFingerprintAvailable) return false;
@@ -98,13 +123,6 @@ class AppLockProvider extends ChangeNotifier {
         localizedReason: 'Buka kunci MyDuit dengan sidik jari',
         biometricOnly: true,
         sensitiveTransaction: false,
-        authMessages: const [
-          AndroidAuthMessages(
-            signInTitle: 'MyDuit',
-            signInHint: 'Sentuh sensor sidik jari',
-            cancelButton: 'Gunakan PIN',
-          ),
-        ],
       );
       if (authenticated) {
         _isUnlocked = true;
@@ -130,6 +148,7 @@ class AppLockProvider extends ChangeNotifier {
   void lock() {
     if (_isLockEnabled) {
       _isUnlocked = false;
+      _pausedAt = null;
       notifyListeners();
     }
   }

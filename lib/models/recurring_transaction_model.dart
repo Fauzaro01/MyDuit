@@ -42,6 +42,7 @@ class RecurringTransactionModel {
   final DateTime? endDate;
   final String? note;
   final String? walletId;
+  final String? customCategoryId;
   final bool isActive;
   final DateTime? lastGeneratedDate;
 
@@ -56,6 +57,7 @@ class RecurringTransactionModel {
     this.endDate,
     this.note,
     this.walletId,
+    this.customCategoryId,
     this.isActive = true,
     this.lastGeneratedDate,
   }) : id = id ?? const Uuid().v4();
@@ -72,6 +74,7 @@ class RecurringTransactionModel {
       'endDate': endDate?.millisecondsSinceEpoch,
       'note': note,
       'walletId': walletId,
+      'customCategoryId': customCategoryId,
       'isActive': isActive ? 1 : 0,
       'lastGeneratedDate': lastGeneratedDate?.millisecondsSinceEpoch,
     };
@@ -91,6 +94,7 @@ class RecurringTransactionModel {
           : null,
       note: map['note'] as String?,
       walletId: map['walletId'] as String?,
+      customCategoryId: map['customCategoryId'] as String?,
       isActive: (map['isActive'] as int? ?? 1) == 1,
       lastGeneratedDate: map['lastGeneratedDate'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['lastGeneratedDate'] as int)
@@ -109,6 +113,7 @@ class RecurringTransactionModel {
     DateTime? endDate,
     String? note,
     String? walletId,
+    String? customCategoryId,
     bool? isActive,
     DateTime? lastGeneratedDate,
   }) {
@@ -123,12 +128,13 @@ class RecurringTransactionModel {
       endDate: endDate ?? this.endDate,
       note: note ?? this.note,
       walletId: walletId ?? this.walletId,
+      customCategoryId: customCategoryId ?? this.customCategoryId,
       isActive: isActive ?? this.isActive,
       lastGeneratedDate: lastGeneratedDate ?? this.lastGeneratedDate,
     );
   }
 
-  /// Calculate next occurrence date from a given date
+  /// Calculate next occurrence date from a given date with month-boundary safety
   DateTime nextOccurrence(DateTime from) {
     switch (frequency) {
       case RecurrenceFrequency.daily:
@@ -136,12 +142,16 @@ class RecurringTransactionModel {
       case RecurrenceFrequency.weekly:
         return from.add(const Duration(days: 7));
       case RecurrenceFrequency.monthly:
-        final nextMonth = from.month == 12
-            ? DateTime(from.year + 1, 1, from.day)
-            : DateTime(from.year, from.month + 1, from.day);
-        return nextMonth;
+        final nextYear = from.month == 12 ? from.year + 1 : from.year;
+        final nextMonth = from.month == 12 ? 1 : from.month + 1;
+        final lastDay = DateTime(nextYear, nextMonth + 1, 0).day;
+        final targetDay = startDate.day <= lastDay ? startDate.day : lastDay;
+        return DateTime(nextYear, nextMonth, targetDay, startDate.hour, startDate.minute, startDate.second);
       case RecurrenceFrequency.yearly:
-        return DateTime(from.year + 1, from.month, from.day);
+        final nextYear = from.year + 1;
+        final lastDay = DateTime(nextYear, startDate.month + 1, 0).day;
+        final targetDay = startDate.day <= lastDay ? startDate.day : lastDay;
+        return DateTime(nextYear, startDate.month, targetDay, startDate.hour, startDate.minute, startDate.second);
     }
   }
 }
