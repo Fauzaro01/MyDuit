@@ -62,6 +62,20 @@ class DatabaseService {
     }
   }
 
+  Future<bool> integrityCheck() async {
+    try {
+      final db = await database;
+      final result = await db.rawQuery('PRAGMA integrity_check');
+      if (result.isNotEmpty && result.first.values.isNotEmpty) {
+        final val = result.first.values.first.toString().toLowerCase();
+        return val == 'ok';
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
       CREATE TABLE wallets(
