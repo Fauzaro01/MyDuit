@@ -182,27 +182,72 @@ class BudgetScreen extends StatelessWidget {
                               value: (totalSpent / totalBudget).clamp(0.0, 1.0),
                               backgroundColor: isDark
                                   ? Colors.white.withValues(alpha: 0.05)
-                                  : Colors.black.withValues(alpha: 0.05),
+                                  : Colors.black.withValues(alpha: 0.04),
                               valueColor: AlwaysStoppedAnimation(
                                 totalSpent > totalBudget
                                     ? AppColors.expense
-                                    : AppColors.income,
+                                    : (totalSpent / totalBudget >= 0.9
+                                        ? const Color(0xFFEA580C)
+                                        : (totalSpent / totalBudget >= 0.8
+                                            ? const Color(0xFFF59E0B)
+                                            : AppColors.income)),
                               ),
                               minHeight: 8,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            totalSpent > totalBudget
-                                ? 'Melebihi anggaran ${CurrencyFormatter.format(totalSpent - totalBudget)}'
-                                : 'Sisa ${CurrencyFormatter.format(totalBudget - totalSpent)}',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: totalSpent > totalBudget
-                                  ? AppColors.expense
-                                  : AppColors.income,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                totalSpent > totalBudget
+                                    ? 'Melebihi anggaran ${CurrencyFormatter.format(totalSpent - totalBudget)}'
+                                    : 'Sisa ${CurrencyFormatter.format(totalBudget - totalSpent)}',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: totalSpent > totalBudget
+                                      ? AppColors.expense
+                                      : (totalSpent / totalBudget >= 0.9
+                                          ? const Color(0xFFEA580C)
+                                          : (totalSpent / totalBudget >= 0.8
+                                              ? const Color(0xFFF59E0B)
+                                              : AppColors.income)),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              if (totalSpent / totalBudget >= 0.8)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: (totalSpent > totalBudget
+                                            ? AppColors.expense
+                                            : (totalSpent / totalBudget >= 0.9
+                                                ? const Color(0xFFEA580C)
+                                                : const Color(0xFFF59E0B)))
+                                        .withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    totalSpent > totalBudget
+                                        ? '⛔ Melebihi Batas'
+                                        : (totalSpent / totalBudget >= 0.9
+                                            ? '🚨 90% Kritis'
+                                            : '⚠️ 80% Waspada'),
+                                    style: TextStyle(
+                                      color: totalSpent > totalBudget
+                                          ? AppColors.expense
+                                          : (totalSpent / totalBudget >= 0.9
+                                              ? const Color(0xFFEA580C)
+                                              : const Color(0xFFF59E0B)),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ],
                       ],
@@ -440,7 +485,20 @@ class _BudgetCategoryTile extends StatelessWidget {
 
     final barColor = isOver
         ? AppColors.expense
-        : (percentage > 80 ? const Color(0xFFF59E0B) : AppColors.income);
+        : (percentage >= 90
+            ? const Color(0xFFEA580C)
+            : (percentage >= 80 ? const Color(0xFFF59E0B) : AppColors.income));
+
+    String? statusBadge;
+    if (hasBudget) {
+      if (isOver) {
+        statusBadge = '⛔ Melebihi Batas';
+      } else if (percentage >= 90) {
+        statusBadge = '🚨 90% Kritis';
+      } else if (percentage >= 80) {
+        statusBadge = '⚠️ 80% Waspada';
+      }
+    }
 
     return InkWell(
       onTap: onSetBudget,
@@ -522,23 +580,39 @@ class _BudgetCategoryTile extends StatelessWidget {
                   ),
                 ),
                 if (hasBudget)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: barColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '${percentage.toStringAsFixed(0)}%',
-                      style: TextStyle(
-                        color: barColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: barColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${percentage.toStringAsFixed(0)}%',
+                          style: TextStyle(
+                            color: barColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                    ),
+                      if (statusBadge != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          statusBadge,
+                          style: TextStyle(
+                            color: barColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ],
                   )
                 else
                   Icon(

@@ -9,6 +9,7 @@ import '../providers/savings_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../utils/formatters.dart';
+import '../widgets/emoji_picker_sheet.dart';
 
 class SavingsGoalsScreen extends StatefulWidget {
   const SavingsGoalsScreen({super.key});
@@ -744,6 +745,25 @@ class _AddGoalSheetState extends State<_AddGoalSheet> {
                   ),
                 );
               }).toList(),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              icon: const Icon(Icons.grid_view_rounded, size: 16),
+              label: const Text('Koleksi Emoji Lainnya...'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: () async {
+                final picked = await EmojiPickerSheet.show(
+                  context,
+                  initialEmoji: _emoji,
+                );
+                if (picked != null) {
+                  setState(() => _emoji = picked);
+                }
+              },
             ),
             const SizedBox(height: 16),
 

@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../models/custom_category_model.dart';
 import '../providers/custom_category_provider.dart';
+import '../widgets/emoji_picker_sheet.dart';
 
 class CustomCategoriesScreen extends StatelessWidget {
   const CustomCategoriesScreen({super.key});
@@ -318,6 +319,25 @@ class CustomCategoriesScreen extends StatelessWidget {
                           ),
                         );
                       }).toList(),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      icon: const Icon(Icons.grid_view_rounded, size: 16),
+                      label: const Text('Koleksi Emoji Lainnya...'),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () async {
+                        final picked = await EmojiPickerSheet.show(
+                          context,
+                          initialEmoji: emojiController.text,
+                        );
+                        if (picked != null) {
+                          setState(() => emojiController.text = picked);
+                        }
+                      },
                     ),
                     const SizedBox(height: 16),
 

@@ -115,14 +115,13 @@ class AppLockProvider extends ChangeNotifier {
     }
   }
 
-  /// Authenticate using fingerprint — returns true if successful
+  /// Authenticate using fingerprint / biometric — returns true if successful
   Future<bool> authenticateWithFingerprint() async {
     if (!_isFingerprintEnabled || !_isFingerprintAvailable) return false;
     try {
       final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Buka kunci MyDuit dengan sidik jari',
+        localizedReason: 'Buka kunci MyDuit dengan Biometrik (Sidik Jari / Wajah)',
         biometricOnly: true,
-        sensitiveTransaction: false,
       );
       if (authenticated) {
         _isUnlocked = true;
