@@ -30,6 +30,7 @@ class _BackupScreenState extends State<BackupScreen> {
   bool _isRestoringSession = false; // Background session restore in progress
   String? _statusMessage;
   DateTime? _lastBackup;
+  DriveBackupInfo? _backupInfo;
   String? _userEmail;
   BackupSchedule _schedule = BackupSchedule.none;
 
@@ -71,9 +72,12 @@ class _BackupScreenState extends State<BackupScreen> {
   }
 
   Future<void> _loadLastBackupTime() async {
-    final time = await GoogleDriveService.getLastBackupTime();
+    final info = await GoogleDriveService.getBackupInfo();
     if (mounted) {
-      setState(() => _lastBackup = time);
+      setState(() {
+        _backupInfo = info;
+        _lastBackup = info?.modifiedTime;
+      });
     }
   }
 
@@ -158,6 +162,9 @@ class _BackupScreenState extends State<BackupScreen> {
           _lastBackup = result.timestamp;
         }
       });
+      if (result.success) {
+        _loadLastBackupTime();
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -219,7 +226,13 @@ class _BackupScreenState extends State<BackupScreen> {
           context.read<DebtProvider>().loadDebts(),
           context.read<RecurringProvider>().loadRecurringTransactions(),
           context.read<CustomCategoryProvider>().loadCategories(),
+          context.read<SplitBillProvider>().loadBills(),
+          context.read<TagProvider>().loadTags(),
+          context.read<SubscriptionProvider>().loadSubscriptions(),
+          context.read<AssetProvider>().loadAssets(),
+          context.read<TemplateProvider>().loadTemplates(),
         ]);
+        _loadLastBackupTime();
       }
       setState(() {
         _statusMessage = result.message;
@@ -455,12 +468,37 @@ class _BackupScreenState extends State<BackupScreen> {
                             'Backup terakhir',
                             style: theme.textTheme.bodyMedium,
                           ),
-                          Text(
-                            _formatDate(_lastBackup!),
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              color: AppColors.income,
-                              fontSize: 14,
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                _formatDate(_lastBackup!),
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  color: AppColors.income,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              if (_backupInfo != null && _backupInfo!.sizeBytes > 0) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.income.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    _backupInfo!.formattedSize,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: AppColors.income,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),

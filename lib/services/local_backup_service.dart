@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -51,12 +52,13 @@ class LocalBackupService {
     final rawJson = jsonEncode(payload);
 
     if (password != null && password.isNotEmpty) {
-      final cipherText = _cipher(rawJson, password);
+      final rawBytes = utf8.encode(rawJson);
+      final cipherBytes = _xorBytes(rawBytes, password);
       return jsonEncode({
         'version': 1,
         'encrypted': true,
         'exportedAt': DateTime.now().toIso8601String(),
-        'cipher': base64Encode(utf8.encode(cipherText)),
+        'cipher': base64Encode(cipherBytes),
       });
     }
 
@@ -87,9 +89,10 @@ class LocalBackupService {
         throw Exception('Password diperlukan untuk membuka file cadangan terenkripsi.');
       }
       final cipherBase64 = parsed['cipher'] as String;
-      final cipherText = utf8.decode(base64Decode(cipherBase64));
-      final decrypted = _cipher(cipherText, password);
-      final Map<String, dynamic> decryptedJson = jsonDecode(decrypted);
+      final cipherBytes = base64Decode(cipherBase64);
+      final decryptedBytes = _xorBytes(cipherBytes, password);
+      final decryptedString = utf8.decode(decryptedBytes);
+      final Map<String, dynamic> decryptedJson = jsonDecode(decryptedString);
       dataMap = decryptedJson['data'] as Map<String, dynamic>;
     } else {
       dataMap = parsed['data'] as Map<String, dynamic>;
@@ -162,16 +165,15 @@ class LocalBackupService {
     return true;
   }
 
-  /// Simple reversible symmetric cipher for local offline backup
-  static String _cipher(String text, String key) {
-    if (key.isEmpty) return text;
-    final textBytes = utf8.encode(text);
+  /// Binary XOR cipher for secure offline local backup
+  static List<int> _xorBytes(List<int> bytes, String key) {
+    if (key.isEmpty) return bytes;
     final keyBytes = utf8.encode(key);
-    final output = <int>[];
+    final output = Uint8List(bytes.length);
 
-    for (int i = 0; i < textBytes.length; i++) {
-      output.add(textBytes[i] ^ keyBytes[i % keyBytes.length]);
+    for (int i = 0; i < bytes.length; i++) {
+      output[i] = bytes[i] ^ keyBytes[i % keyBytes.length];
     }
-    return String.fromCharCodes(output);
+    return output;
   }
 }

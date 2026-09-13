@@ -57,7 +57,7 @@ class DatabaseService {
   Future<void> checkpointWal() async {
     if (_database != null && _database!.isOpen) {
       try {
-        await _database!.rawQuery('PRAGMA wal_checkpoint(FULL)');
+        await _database!.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
       } catch (_) {}
     }
   }
