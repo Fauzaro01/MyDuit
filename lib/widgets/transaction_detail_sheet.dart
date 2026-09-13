@@ -5,10 +5,12 @@ import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../models/transaction_model.dart';
 import '../providers/custom_category_provider.dart';
+import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../providers/currency_provider.dart';
 import '../utils/formatters.dart';
 import '../screens/add_transaction_screen.dart';
+import '../services/single_receipt_export_service.dart';
 
 void showTransactionDetail(
   BuildContext context,
@@ -257,14 +259,79 @@ void showTransactionDetail(
               isDark: isDark,
             ),
           ],
-          const SizedBox(height: 28),
+          const SizedBox(height: 16),
+
+          // Share receipt slip button
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                SingleReceiptExportService.exportAndShareReceipt(
+                  transaction,
+                  walletName: wallet?.name,
+                  categoryName: categoryLabel,
+                );
+              },
+              icon: const Icon(Icons.share_outlined, size: 18),
+              label: const Text('Bagikan Struk Transaksi (PDF)'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
 
           // Action buttons
           Row(
             children: [
+              IconButton.outlined(
+                tooltip: transaction.isPinned ? 'Lepas Pin' : 'Sematkan (Pin)',
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  context.read<TransactionProvider>().togglePin(transaction.id);
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        transaction.isPinned
+                            ? 'Pin transaksi dilepas'
+                            : 'Transaksi disematkan di atas 📌',
+                      ),
+                      duration: const Duration(seconds: 2),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+                icon: Icon(
+                  transaction.isPinned
+                      ? Icons.push_pin_rounded
+                      : Icons.push_pin_outlined,
+                  size: 20,
+                  color: transaction.isPinned
+                      ? (isDark ? AppColors.primaryDark : AppColors.primaryLight)
+                      : null,
+                ),
+                style: IconButton.styleFrom(
+                  padding: const EdgeInsets.all(14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  side: BorderSide(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : Colors.black.withValues(alpha: 0.1),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () {
+                    HapticFeedback.lightImpact();
                     Navigator.pop(context);
                     Navigator.push(
                       context,
@@ -289,57 +356,84 @@ void showTransactionDetail(
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () async {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AddTransactionScreen(
+                          transaction: transaction,
+                          isDuplicate: true,
                         ),
-                        title: const Text('Hapus Transaksi'),
-                        content: const Text(
-                          'Apakah kamu yakin ingin menghapus transaksi ini?',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('Batal'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text(
-                              'Hapus',
-                              style: TextStyle(color: AppColors.expense),
-                            ),
-                          ),
-                        ],
                       ),
                     );
-                    if (confirmed == true) {
-                      onDeleted?.call();
-                      if (context.mounted) Navigator.pop(context);
-                    }
                   },
-                  icon: const Icon(
-                    Icons.delete_outline_rounded,
-                    size: 18,
-                    color: AppColors.expense,
-                  ),
-                  label: const Text(
-                    'Hapus',
-                    style: TextStyle(color: AppColors.expense),
-                  ),
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  label: const Text('Duplikat'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
                     side: BorderSide(
-                      color: AppColors.expense.withValues(alpha: 0.3),
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.1)
+                          : Colors.black.withValues(alpha: 0.1),
                     ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.outlined(
+                tooltip: 'Hapus Transaksi',
+                onPressed: () async {
+                  HapticFeedback.lightImpact();
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      title: const Text('Hapus Transaksi'),
+                      content: const Text(
+                        'Apakah kamu yakin ingin menghapus transaksi ini?',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Batal'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text(
+                            'Hapus',
+                            style: TextStyle(color: AppColors.expense),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    onDeleted?.call();
+                    if (context.mounted) Navigator.pop(context);
+                  }
+                },
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  size: 20,
+                  color: AppColors.expense,
+                ),
+                style: IconButton.styleFrom(
+                  padding: const EdgeInsets.all(14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  side: BorderSide(
+                    color: AppColors.expense.withValues(alpha: 0.3),
                   ),
                 ),
               ),

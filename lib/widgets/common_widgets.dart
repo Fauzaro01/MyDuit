@@ -7,6 +7,7 @@ import '../providers/custom_category_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../screens/add_transaction_screen.dart';
 import '../utils/formatters.dart';
 
 class BalanceCard extends StatelessWidget {
@@ -248,8 +249,22 @@ class TransactionTile extends StatelessWidget {
 
     return Dismissible(
       key: Key(transaction.id),
-      direction: DismissDirection.endToStart,
+      direction: DismissDirection.horizontal,
       background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 24),
+        decoration: BoxDecoration(
+          color: (isDark ? AppColors.primaryDark : AppColors.primaryLight)
+              .withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Icon(
+          Icons.edit_outlined,
+          color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+          size: 24,
+        ),
+      ),
+      secondaryBackground: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 24),
         decoration: BoxDecoration(
@@ -263,6 +278,15 @@ class TransactionTile extends StatelessWidget {
         ),
       ),
       confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AddTransactionScreen(transaction: transaction),
+            ),
+          );
+          return false;
+        }
         return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -321,11 +345,27 @@ class TransactionTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      transaction.title,
-                      style: theme.textTheme.titleMedium,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        if (transaction.isPinned) ...[
+                          Icon(
+                            Icons.push_pin_rounded,
+                            size: 14,
+                            color: isDark
+                                ? AppColors.primaryDark
+                                : AppColors.primaryLight,
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Expanded(
+                          child: Text(
+                            transaction.title,
+                            style: theme.textTheme.titleMedium,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(

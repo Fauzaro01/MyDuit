@@ -5,6 +5,7 @@ import '../models/subscription_model.dart';
 import '../models/transaction_model.dart';
 import '../providers/subscription_provider.dart';
 import '../providers/transaction_provider.dart';
+import '../services/subscription_analyzer_service.dart';
 import '../utils/formatters.dart';
 
 class SubscriptionScreen extends StatelessWidget {
@@ -19,6 +20,10 @@ class SubscriptionScreen extends StatelessWidget {
     final totalMonthly = subProvider.totalMonthlyCost;
     final totalIncome = txProvider.totalIncome;
     final fixedCostRatio = totalIncome > 0 ? (totalMonthly / totalIncome) * 100 : 0.0;
+    final hikeAlerts = SubscriptionAnalyzerService.detectPriceHikes(
+      subscriptions: subProvider.subscriptions,
+      transactions: txProvider.transactions,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -32,6 +37,71 @@ class SubscriptionScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          if (hikeAlerts.isNotEmpty) ...[
+            ...hikeAlerts.map((alert) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEA580C).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFFEA580C).withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.trending_up_rounded, color: Color(0xFFEA580C), size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Deteksi Kenaikan Harga: ${alert.subscription.name}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Color(0xFFEA580C),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Transaksi terakhir tercatat ${CurrencyFormatter.format(alert.newAmount)} '
+                            '(Naik ${alert.percentageIncrease.toStringAsFixed(1)}% dari batas ${CurrencyFormatter.format(alert.oldAmount)}). '
+                            'Beban tambahan: +${CurrencyFormatter.formatCompact(alert.annualImpact)}/thn.',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(50, 24),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: () {
+                              subProvider.updateSubscription(
+                                alert.subscription.copyWith(amount: alert.newAmount),
+                              );
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Nominal langganan diperbarui mengikuti tagihan baru'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            },
+                            child: const Text('Perbarui Tarif Langganan', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+
           // Total Monthly Fixed Cost Summary Card
           Container(
             padding: const EdgeInsets.all(20),

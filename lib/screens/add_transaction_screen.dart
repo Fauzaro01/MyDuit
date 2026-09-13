@@ -18,12 +18,14 @@ class AddTransactionScreen extends StatefulWidget {
   final TransactionModel? transaction;
   final TransactionTemplateModel? template;
   final bool initialIsIncome;
+  final bool isDuplicate;
 
   const AddTransactionScreen({
     super.key,
     this.transaction,
     this.template,
     this.initialIsIncome = true,
+    this.isDuplicate = false,
   });
 
   @override
@@ -49,7 +51,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   void initState() {
     super.initState();
     if (widget.transaction != null) {
-      _isEditing = true;
+      _isEditing = !widget.isDuplicate;
       final tx = widget.transaction!;
       _titleController.text = tx.title;
       _amountController.text = CurrencyInputService.isFormatted
@@ -59,7 +61,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _type = tx.type;
       _category = tx.category;
       _customCategoryId = tx.customCategoryId;
-      _date = tx.date;
+      _date = widget.isDuplicate ? DateTime.now() : tx.date;
       _tags = List<String>.from(tx.tags);
     } else if (widget.template != null) {
       final tpl = widget.template!;
@@ -250,10 +252,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   color: isIncome ? AppColors.income : AppColors.expense,
                 ),
                 hintText: '0',
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.calculate_outlined),
-                  tooltip: 'Kalkulator',
-                  onPressed: () => _showMiniCalculator(context, isDark),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.percent_rounded, size: 20),
+                      tooltip: 'Hitung Pajak & Layanan',
+                      onPressed: () => _showTaxTipSheet(context, isDark),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.calculate_outlined),
+                      tooltip: 'Kalkulator',
+                      onPressed: () => _showMiniCalculator(context, isDark),
+                    ),
+                  ],
                 ),
               ),
               validator: (value) {
@@ -266,6 +278,45 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 return null;
               },
             ),
+            const SizedBox(height: 8),
+
+            // Quick Preset Chips (+50k, +100k, +500k, +1M)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildQuickPresetChip(50000, '+50rb', isDark),
+                  const SizedBox(width: 8),
+                  _buildQuickPresetChip(100000, '+100rb', isDark),
+                  const SizedBox(width: 8),
+                  _buildQuickPresetChip(500000, '+500rb', isDark),
+                  const SizedBox(width: 8),
+                  _buildQuickPresetChip(1000000, '+1jt', isDark),
+                ],
+              ),
+            ),
+            if (!isIncome && RupiahInputFormatter.parse(_amountController.text) >= 1000000) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFFF59E0B)),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Peringatan Pengeluaran Besar (≥ Rp 1.000.000)',
+                        style: TextStyle(fontSize: 11, color: Color(0xFFF59E0B), fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
 
             // Title
@@ -468,6 +519,46 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               decoration: const InputDecoration(
                 hintText: 'Tambahkan catatan...',
               ),
+              onChanged: (_) => setState(() {}),
+            ),
+            Builder(
+              builder: (context) {
+                final txProvider = Provider.of<TransactionProvider?>(context);
+                final recentNotes = (txProvider?.transactions ?? [])
+                    .map((t) => t.note?.trim())
+                    .where((n) => n != null && n.isNotEmpty)
+                    .cast<String>()
+                    .toSet()
+                    .take(6)
+                    .toList();
+
+                if (recentNotes.isEmpty) return const SizedBox.shrink();
+
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: recentNotes.map((note) {
+                      return ActionChip(
+                        label: Text(
+                          note,
+                          style: const TextStyle(fontSize: 11),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        padding: EdgeInsets.zero,
+                        onPressed: () {
+                          HapticFeedback.selectionClick();
+                          setState(() {
+                            _noteController.text = note;
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 32),
 
@@ -612,7 +703,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       },
     );
     if (picked != null) {
-      setState(() => _date = picked);
+      final now = DateTime.now();
+      final adjusted = DateTime(
+        picked.year,
+        picked.month,
+        picked.day,
+        now.hour,
+        now.minute,
+        now.second,
+      );
+      setState(() => _date = adjusted);
     }
   }
 
@@ -839,6 +939,56 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildQuickPresetChip(double addAmount, String label, bool isDark) {
+    return ActionChip(
+      avatar: const Icon(Icons.add_rounded, size: 14),
+      label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+      backgroundColor: isDark ? AppColors.cardDark : AppColors.cardAltLight,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      onPressed: () {
+        HapticFeedback.selectionClick();
+        final current = RupiahInputFormatter.parse(_amountController.text);
+        final newTotal = current + addAmount;
+        setState(() {
+          _amountController.text = CurrencyInputService.isFormatted
+              ? RupiahInputFormatter.formatNumber(newTotal)
+              : newTotal.toStringAsFixed(0);
+        });
+      },
+    );
+  }
+
+  void _showTaxTipSheet(BuildContext context, bool isDark) {
+    HapticFeedback.lightImpact();
+    final currentAmount = RupiahInputFormatter.parse(_amountController.text);
+    if (currentAmount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Masukkan nominal awal terlebih dahulu.')),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => _TaxTipSheet(
+        baseAmount: currentAmount,
+        isDark: isDark,
+        onApply: (finalAmount) {
+          setState(() {
+            _amountController.text = CurrencyInputService.isFormatted
+                ? RupiahInputFormatter.formatNumber(finalAmount)
+                : finalAmount.toStringAsFixed(0);
+          });
+        },
+      ),
     );
   }
 
@@ -1218,6 +1368,193 @@ class _MiniCalcSheetState extends State<_MiniCalcSheet> {
           ),
         );
       }).toList(),
+    );
+  }
+}
+
+class _TaxTipSheet extends StatefulWidget {
+  final double baseAmount;
+  final bool isDark;
+  final ValueChanged<double> onApply;
+
+  const _TaxTipSheet({
+    required this.baseAmount,
+    required this.isDark,
+    required this.onApply,
+  });
+
+  @override
+  State<_TaxTipSheet> createState() => _TaxTipSheetState();
+}
+
+class _TaxTipSheetState extends State<_TaxTipSheet> {
+  double _taxPercent = 11.0;
+  double _servicePercent = 0.0;
+  bool _includeTax = true;
+  bool _includeService = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accentColor = widget.isDark ? AppColors.primaryDark : AppColors.primaryLight;
+
+    final taxAmount = _includeTax ? (widget.baseAmount * (_taxPercent / 100.0)) : 0.0;
+    final serviceAmount = _includeService ? (widget.baseAmount * (_servicePercent / 100.0)) : 0.0;
+    final finalTotal = widget.baseAmount + taxAmount + serviceAmount;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.percent_rounded, color: accentColor),
+                const SizedBox(width: 8),
+                Text('Kalkulator Pajak & Layanan', style: theme.textTheme.titleMedium),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: widget.isDark ? AppColors.cardAltDark : AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Nominal Awal:'),
+                      Text(
+                        CurrencyFormatter.format(widget.baseAmount),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  if (_includeTax) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('PPN (${_taxPercent.toInt()}%):'),
+                        Text(
+                          '+ ${CurrencyFormatter.format(taxAmount)}',
+                          style: const TextStyle(color: AppColors.expense, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (_includeService) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Service Charge (${_servicePercent.toInt()}%):'),
+                        Text(
+                          '+ ${CurrencyFormatter.format(serviceAmount)}',
+                          style: const TextStyle(color: AppColors.expense, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const Divider(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Total Akhir:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text(
+                        CurrencyFormatter.format(finalTotal),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          color: accentColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Tax presets
+            Row(
+              children: [
+                Checkbox(
+                  value: _includeTax,
+                  activeColor: accentColor,
+                  onChanged: (v) => setState(() => _includeTax = v ?? false),
+                ),
+                const Text('Pajak PPN: '),
+                Wrap(
+                  spacing: 6,
+                  children: [10.0, 11.0, 12.0].map((rate) {
+                    final selected = _includeTax && _taxPercent == rate;
+                    return ChoiceChip(
+                      label: Text('${rate.toInt()}%'),
+                      selected: selected,
+                      onSelected: (sel) {
+                        if (sel) {
+                          setState(() {
+                            _includeTax = true;
+                            _taxPercent = rate;
+                          });
+                        }
+                      },
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+            // Service presets
+            Row(
+              children: [
+                Checkbox(
+                  value: _includeService,
+                  activeColor: accentColor,
+                  onChanged: (v) => setState(() => _includeService = v ?? false),
+                ),
+                const Text('Layanan: '),
+                Wrap(
+                  spacing: 6,
+                  children: [5.0, 7.0, 10.0].map((rate) {
+                    final selected = _includeService && _servicePercent == rate;
+                    return ChoiceChip(
+                      label: Text('${rate.toInt()}%'),
+                      selected: selected,
+                      onSelected: (sel) {
+                        if (sel) {
+                          setState(() {
+                            _includeService = true;
+                            _servicePercent = rate;
+                          });
+                        }
+                      },
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Terapkan Nilai Total'),
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  widget.onApply(finalTotal);
+                  Navigator.pop(context);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

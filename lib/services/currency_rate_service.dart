@@ -49,6 +49,18 @@ class CurrencyRateService {
   }
 
   /// Fetch latest exchange rates from free public API
+  static Future<DateTime?> getLastUpdatedTime() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ms = prefs.getInt(_lastUpdatedKey);
+      if (ms != null) {
+        return DateTime.fromMillisecondsSinceEpoch(ms);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Fetch latest exchange rates from free public API
   static Future<Map<String, double>?> fetchLiveRates() async {
     try {
       final response = await http

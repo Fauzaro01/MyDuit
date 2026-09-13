@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/debt_model.dart';
+import '../models/debt_payment_model.dart';
 import '../services/database_service.dart';
 
 class DebtProvider extends ChangeNotifier {
@@ -60,17 +61,31 @@ class DebtProvider extends ChangeNotifier {
     await loadDebts();
   }
 
-  Future<void> addPayment(String debtId, double amount) async {
+  Future<void> addPayment(
+    String debtId,
+    double amount, {
+    String? note,
+    DateTime? date,
+  }) async {
     if (amount <= 0) return;
     final debt = _debts.where((d) => d.id == debtId).firstOrNull;
     if (debt == null || debt.isSettled) return;
 
     final effectivePayment = amount > debt.remainingAmount ? debt.remainingAmount : amount;
-    await _dbService.addDebtPayment(debtId, effectivePayment);
+    await _dbService.addDebtPayment(
+      debtId,
+      effectivePayment,
+      note: note,
+      date: date,
+    );
     if (debt.paidAmount + effectivePayment >= debt.amount) {
       await _dbService.updateDebt(debt.copyWith(isSettled: true, paidAmount: debt.amount));
     }
     await loadDebts();
+  }
+
+  Future<List<DebtPaymentModel>> getPaymentsForDebt(String debtId) async {
+    return _dbService.getDebtPayments(debtId);
   }
 
   Future<void> settleDebt(DebtModel debt) async {

@@ -11,6 +11,7 @@ import '../providers/wallet_provider.dart';
 import '../utils/formatters.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../services/auto_allocation_engine.dart';
+import '../services/compound_interest_service.dart';
 
 class SavingsGoalsScreen extends StatefulWidget {
   const SavingsGoalsScreen({super.key});
@@ -558,10 +559,21 @@ class _GoalCard extends StatelessWidget {
               ),
               PopupMenuButton<String>(
                 onSelected: (val) {
+                  if (val == 'simulate') _showCompoundSimulator(context, goal);
                   if (val == 'edit') onEdit?.call();
                   if (val == 'delete') onDelete();
                 },
                 itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'simulate',
+                    child: Row(
+                      children: [
+                        Icon(Icons.trending_up_rounded, size: 18),
+                        SizedBox(width: 8),
+                        Text('Simulasi Investasi (FV)'),
+                      ],
+                    ),
+                  ),
                   if (onEdit != null)
                     const PopupMenuItem(value: 'edit', child: Text('Edit')),
                   const PopupMenuItem(value: 'delete', child: Text('Hapus')),
@@ -640,6 +652,129 @@ class _GoalCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+
+  void _showCompoundSimulator(BuildContext context, SavingsGoalModel goal) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    double expectedReturn = 6.0; // 6% p.a. default
+    double monthlyAdd = 500000;
+    int horizonYears = 3;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final projections = CompoundInterestService.calculateGrowthSchedule(
+              initialAmount: goal.currentAmount,
+              monthlyDeposit: monthlyAdd,
+              annualRatePercent: expectedReturn,
+              durationMonths: horizonYears * 12,
+            );
+            final finalProj = projections.last;
+
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(goal.emoji, style: const TextStyle(fontSize: 24)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Simulasi Pertumbuhan ${goal.title}',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.income.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Hasil Akhir Proyeksi (FV)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                            const SizedBox(height: 4),
+                            Text(
+                              CurrencyFormatter.format(finalProj.totalFutureValue),
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.income),
+                            ),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text('Bunga / Cuan', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                            const SizedBox(height: 4),
+                            Text(
+                              '+${CurrencyFormatter.formatCompact(finalProj.totalInterestEarned)}',
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.income),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Setoran Rutin: ${CurrencyFormatter.format(monthlyAdd)}/bulan', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  Slider(
+                    value: monthlyAdd,
+                    min: 100000,
+                    max: 5000000,
+                    divisions: 49,
+                    label: CurrencyFormatter.formatCompact(monthlyAdd),
+                    onChanged: (v) => setSheetState(() => monthlyAdd = v),
+                  ),
+                  Text('Asumsi Imbal Hasil: ${expectedReturn.toStringAsFixed(1)}% p.a.', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  Slider(
+                    value: expectedReturn,
+                    min: 1.0,
+                    max: 15.0,
+                    divisions: 28,
+                    label: '${expectedReturn.toStringAsFixed(1)}%',
+                    onChanged: (v) => setSheetState(() => expectedReturn = v),
+                  ),
+                  Text('Jangka Waktu: $horizonYears Tahun (${horizonYears * 12} Bulan)', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  Slider(
+                    value: horizonYears.toDouble(),
+                    min: 1,
+                    max: 10,
+                    divisions: 9,
+                    label: '$horizonYears Tahun',
+                    onChanged: (v) => setSheetState(() => horizonYears = v.toInt()),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Tutup Simulasi'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

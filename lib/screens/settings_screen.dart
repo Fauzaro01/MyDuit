@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -9,6 +10,7 @@ import '../providers/transaction_provider.dart';
 import '../providers/app_lock_provider.dart';
 import '../providers/custom_category_provider.dart';
 import '../services/export_service.dart';
+import '../providers/currency_provider.dart';
 import '../services/pdf_export_service.dart';
 import '../services/notification_service.dart';
 import 'budget_screen.dart';
@@ -327,6 +329,21 @@ class SettingsScreen extends StatelessWidget {
                       activeTrackColor: AppColors.primaryDark,
                     ),
                   ),
+                  if (themeProvider.themeMode == ThemeMode.dark) ...[
+                    const Divider(height: 1, indent: 56),
+                    _SettingsTile(
+                      icon: Icons.brightness_2_rounded,
+                      title: 'AMOLED Pure Black',
+                      subtitle: themeProvider.isAmoledMode
+                          ? 'Hitam murni (#000000) hemat baterai OLED'
+                          : 'Warna gelap standar',
+                      trailing: Switch.adaptive(
+                        value: themeProvider.isAmoledMode,
+                        onChanged: (_) => themeProvider.toggleAmoledMode(),
+                        activeTrackColor: AppColors.primaryDark,
+                      ),
+                    ),
+                  ],
                   const Divider(height: 1, indent: 56),
                   _SettingsTile(
                     icon: Icons.palette_outlined,
@@ -381,7 +398,24 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const Divider(height: 1, indent: 56),
+                  _SettingsTile(
+                    icon: Icons.vibration_rounded,
+                    title: 'Umpan Balik Haptik (Getar)',
+                    subtitle: themeProvider.isHapticsEnabled
+                        ? 'Getar halus saat tap & simpan data'
+                        : 'Getar dinonaktifkan',
+                    trailing: Switch.adaptive(
+                      value: themeProvider.isHapticsEnabled,
+                      onChanged: (_) => themeProvider.toggleHaptics(),
+                      activeTrackColor: isDark
+                          ? AppColors.primaryDark
+                          : AppColors.primaryLight,
+                    ),
+                  ),
+                  const Divider(height: 1, indent: 56),
                   _CurrencyFormatTile(isDark: isDark),
+                  const Divider(height: 1, indent: 56),
+                  _BaseCurrencyTile(isDark: isDark),
                 ],
               )
               .animate()
@@ -1222,6 +1256,124 @@ class _NotificationCardState extends State<_NotificationCard> {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _BaseCurrencyTile extends StatelessWidget {
+  final bool isDark;
+  const _BaseCurrencyTile({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final currProvider = Provider.of<CurrencyProvider?>(context);
+    final currentCode = currProvider?.baseCurrencyCode ?? 'IDR';
+    final isStale = currProvider?.isRateStale ?? false;
+
+    return _SettingsTile(
+      icon: Icons.currency_exchange_rounded,
+      title: 'Mata Uang Utama',
+      subtitle: isStale
+          ? '$currentCode - ${currProvider?.getSymbol(currentCode) ?? 'Rp'} ⚠️ (Kurs >24 jam)'
+          : '$currentCode - ${currProvider?.getSymbol(currentCode) ?? 'Rp'}',
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isStale)
+            const Padding(
+              padding: EdgeInsets.only(right: 6),
+              child: Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.amber,
+                size: 18,
+              ),
+            ),
+          const Icon(Icons.chevron_right_rounded, size: 22),
+        ],
+      ),
+      onTap: () {
+        showModalBottomSheet(
+          context: context,
+          backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          builder: (ctx) {
+            final currencies = currProvider?.availableCurrencies ?? [];
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: (isDark ? AppColors.primaryDark : AppColors.primaryLight).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.currency_exchange_rounded,
+                            color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Pilih Mata Uang Utama',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    ...currencies.map((c) {
+                      final isSelected = c.code == currentCode;
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        leading: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.cardAltDark : AppColors.cardAltLight,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            c.symbol,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                        ),
+                        title: Text(
+                          '${c.code} - ${c.name}',
+                          style: TextStyle(
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                        subtitle: Text(
+                          c.code == 'IDR'
+                              ? 'Basis nilai acuan'
+                              : '1 ${c.code} ≈ ${CurrencyFormatter.format(c.rateToIdr)}',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        trailing: isSelected
+                            ? const Icon(Icons.check_circle_rounded, color: AppColors.income)
+                            : null,
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          currProvider?.setBaseCurrency(c.code);
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

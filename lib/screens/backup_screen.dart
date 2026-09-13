@@ -390,6 +390,48 @@ class _BackupScreenState extends State<BackupScreen> {
           const SizedBox(height: 20),
 
           if (_isConnected) ...[
+            // 30-Day Stale Backup Warning
+            if (_lastBackup != null && DateTime.now().difference(_lastBackup!).inDays >= 30)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.amber, width: 1.2),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.amber,
+                      size: 26,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Peringatan Cadangan Kadaluarsa',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: Colors.amber,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Sudah ${DateTime.now().difference(_lastBackup!).inDays} hari sejak backup terakhir. Amankan data keuanganmu sekarang.',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ).animate().fadeIn(duration: 300.ms),
+
             // Last backup info
             if (_lastBackup != null)
               Container(
