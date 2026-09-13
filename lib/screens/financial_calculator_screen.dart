@@ -19,7 +19,7 @@ class _FinancialCalculatorScreenState extends State<FinancialCalculatorScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -50,6 +50,7 @@ class _FinancialCalculatorScreenState extends State<FinancialCalculatorScreen>
             Tab(text: '🏠 Pinjaman/KPR'),
             Tab(text: '🛡️ Dana Darurat'),
             Tab(text: '🏖️ Pensiun (FIRE)'),
+            Tab(text: '📉 Inflasi & Daya Beli'),
           ],
         ),
       ),
@@ -60,6 +61,7 @@ class _FinancialCalculatorScreenState extends State<FinancialCalculatorScreen>
           _LoanCalculatorTab(),
           _EmergencyFundTab(),
           _RetirementTab(),
+          _InflationCalculatorTab(),
         ],
       ),
     );
@@ -627,6 +629,152 @@ class _RetirementTabState extends State<_RetirementTab> {
                       value: '${res.yearsToRetirement} Tahun',
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildField(String label, TextEditingController controller,
+      {bool isDigits = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.labelMedium),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          inputFormatters: isDigits
+              ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))]
+              : CurrencyInputService.isFormatted
+                  ? [RupiahInputFormatter()]
+                  : [FilteringTextInputFormatter.digitsOnly],
+          onChanged: (_) => _calculate(),
+          decoration: const InputDecoration(isDense: true),
+        ),
+      ],
+    );
+  }
+}
+
+// ── 5. INFLATION & PURCHASING POWER TAB ──────────────────
+class _InflationCalculatorTab extends StatefulWidget {
+  const _InflationCalculatorTab();
+
+  @override
+  State<_InflationCalculatorTab> createState() => _InflationCalculatorTabState();
+}
+
+class _InflationCalculatorTabState extends State<_InflationCalculatorTab> {
+  final _amountController = TextEditingController(text: '100000000');
+  final _inflationRateController = TextEditingController(text: '4.5');
+  final _yearsController = TextEditingController(text: '10');
+
+  InflationResult? _result;
+
+  @override
+  void initState() {
+    super.initState();
+    _calculate();
+  }
+
+  void _calculate() {
+    final amount = RupiahInputFormatter.parse(_amountController.text);
+    final rate = double.tryParse(_inflationRateController.text) ?? 4.5;
+    final years = int.tryParse(_yearsController.text) ?? 10;
+
+    setState(() {
+      _result = FinancialCalculatorService.calculateInflation(
+        amount: amount,
+        annualInflationRatePercent: rate,
+        years: years,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final res = _result;
+
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        _buildField('Nominal Uang Saat Ini (Rp)', _amountController),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildField(
+                'Estimasi Inflasi (%/Thn)',
+                _inflationRateController,
+                isDigits: true,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildField(
+                'Jangka Waktu (Tahun)',
+                _yearsController,
+                isDigits: true,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        if (res != null) ...[
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [const Color(0xFF4C0519), const Color(0xFF1E1B4B)]
+                    : [const Color(0xFFE11D48), const Color(0xFF9F1239)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Daya Beli Riil Setelah ${res.years} Tahun',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  CurrencyFormatter.format(res.futurePurchasingPower),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const Divider(color: Colors.white24, height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _ResultColumn(
+                      label: 'Penurunan Nilai Riil',
+                      value: '-${res.purchasingPowerLossPercent.toStringAsFixed(1)}%',
+                      valueColor: const Color(0xFFFCA5A5),
+                    ),
+                    _ResultColumn(
+                      label: 'Uang Pengganti Setara',
+                      value: CurrencyFormatter.formatCompact(res.equivalentFutureAmount),
+                      valueColor: const Color(0xFFFBBF24),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '💡 Untuk membeli barang seharga ${CurrencyFormatter.format(res.originalAmount)} hari ini, kamu butuh ${CurrencyFormatter.format(res.equivalentFutureAmount)} di masa depan.',
+                  style: const TextStyle(color: Colors.white, fontSize: 11, height: 1.4),
                 ),
               ],
             ),

@@ -13,6 +13,13 @@ import '../services/export_service.dart';
 import '../providers/currency_provider.dart';
 import '../services/pdf_export_service.dart';
 import '../services/notification_service.dart';
+import '../services/database_service.dart';
+import '../providers/debt_provider.dart';
+import '../providers/savings_provider.dart';
+import '../providers/subscription_provider.dart';
+import '../providers/asset_provider.dart';
+import '../providers/split_bill_provider.dart';
+import '../providers/wallet_provider.dart';
 import 'budget_screen.dart';
 import 'wallet_screen.dart';
 import 'recurring_transactions_screen.dart';
@@ -308,6 +315,14 @@ class SettingsScreen extends StatelessWidget {
                   );
                 },
               ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.cleaning_services_rounded,
+                title: 'Reset Data Selektif',
+                subtitle: 'Hapus modul tertentu tanpa merusak setelan',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () => _showSelectiveResetDialog(context),
+              ),
             ],
           ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
 
@@ -416,6 +431,8 @@ class SettingsScreen extends StatelessWidget {
                   _CurrencyFormatTile(isDark: isDark),
                   const Divider(height: 1, indent: 56),
                   _BaseCurrencyTile(isDark: isDark),
+                  const Divider(height: 1, indent: 56),
+                  _FontSizeTile(isDark: isDark),
                 ],
               )
               .animate()
@@ -1013,6 +1030,13 @@ class SettingsScreen extends StatelessWidget {
       },
     );
   }
+
+  void _showSelectiveResetDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => const _SelectiveResetDialog(),
+    );
+  }
 }
 
 class _SectionHeader extends StatelessWidget {
@@ -1374,6 +1398,243 @@ class _BaseCurrencyTile extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _FontSizeTile extends StatelessWidget {
+  final bool isDark;
+  const _FontSizeTile({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final currentScale = themeProvider.fontScale;
+
+    String getScaleLabel(double scale) {
+      if (scale <= 0.9) return 'Kecil (0.9x)';
+      if (scale >= 1.15) return 'Besar (1.15x)';
+      return 'Standar (1.0x)';
+    }
+
+    return _SettingsTile(
+      icon: Icons.format_size_rounded,
+      title: 'Ukuran Font Aplikasi',
+      subtitle: getScaleLabel(currentScale),
+      trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+      onTap: () {
+        showModalBottomSheet(
+          context: context,
+          backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          builder: (ctx) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: (isDark ? AppColors.primaryDark : AppColors.primaryLight).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.format_size_rounded,
+                            color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Pilih Ukuran Font',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildOption(ctx, themeProvider, 0.9, 'Kecil (0.9x)', 'Teks lebih ringkas & padat'),
+                    _buildOption(ctx, themeProvider, 1.0, 'Standar (1.0x)', 'Ukuran default'),
+                    _buildOption(ctx, themeProvider, 1.15, 'Besar (1.15x)', 'Teks lebih besar & mudah dibaca'),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildOption(BuildContext ctx, ThemeProvider provider, double scale, String title, String subtitle) {
+    final isSelected = (provider.fontScale - scale).abs() < 0.01;
+    return ListTile(
+      title: Text(title, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+      trailing: isSelected ? const Icon(Icons.check_circle_rounded, color: AppColors.income) : null,
+      onTap: () {
+        HapticFeedback.lightImpact();
+        provider.setFontScale(scale);
+        Navigator.pop(ctx);
+      },
+    );
+  }
+}
+
+class _SelectiveResetDialog extends StatefulWidget {
+  const _SelectiveResetDialog();
+
+  @override
+  State<_SelectiveResetDialog> createState() => _SelectiveResetDialogState();
+}
+
+class _SelectiveResetDialogState extends State<_SelectiveResetDialog> {
+  bool _resetTransactions = false;
+  bool _resetDebts = false;
+  bool _resetSavings = false;
+  bool _resetSubscriptions = false;
+  bool _resetAssets = false;
+  bool _resetSplitBills = false;
+  bool _isProcessing = false;
+
+  bool get _hasSelection =>
+      _resetTransactions ||
+      _resetDebts ||
+      _resetSavings ||
+      _resetSubscriptions ||
+      _resetAssets ||
+      _resetSplitBills;
+
+  Future<void> _executeReset() async {
+    if (!_hasSelection) return;
+
+    setState(() => _isProcessing = true);
+    final db = DatabaseService();
+
+    try {
+      if (_resetTransactions) {
+        await db.clearTransactions();
+        if (mounted) {
+          final txProvider = context.read<TransactionProvider>();
+          final walletProvider = context.read<WalletProvider>();
+          await txProvider.loadData();
+          await walletProvider.refreshBalances();
+        }
+      }
+      if (_resetDebts) {
+        await db.clearDebts();
+        if (mounted) {
+          final debtProvider = context.read<DebtProvider>();
+          await debtProvider.loadDebts();
+        }
+      }
+      if (_resetSavings) {
+        await db.clearSavingsGoals();
+        if (mounted) {
+          final savingsProvider = context.read<SavingsProvider>();
+          await savingsProvider.loadGoals();
+        }
+      }
+      if (_resetSubscriptions) {
+        await db.clearSubscriptions();
+        if (mounted) {
+          final subProvider = context.read<SubscriptionProvider>();
+          await subProvider.loadSubscriptions();
+        }
+      }
+      if (_resetAssets) {
+        await db.clearAssets();
+        if (mounted) {
+          final assetProvider = context.read<AssetProvider>();
+          await assetProvider.loadAssets();
+        }
+      }
+      if (_resetSplitBills) {
+        await db.clearSplitBills();
+        if (mounted) {
+          final splitProvider = context.read<SplitBillProvider>();
+          await splitProvider.loadBills();
+        }
+      }
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Data modul terpilih berhasil direset'),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal mereset: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+          SizedBox(width: 8),
+          Text('Reset Data Selektif', style: TextStyle(fontSize: 18)),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Pilih modul yang ingin dikosongkan. Setelan akun, PIN, dan daftar dompet tetap aman.',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            _buildCheckbox('Riwayat Transaksi & Mutasi', _resetTransactions, (v) => setState(() => _resetTransactions = v ?? false)),
+            _buildCheckbox('Utang & Piutang', _resetDebts, (v) => setState(() => _resetDebts = v ?? false)),
+            _buildCheckbox('Target Tabungan', _resetSavings, (v) => setState(() => _resetSavings = v ?? false)),
+            _buildCheckbox('Langganan Berulang', _resetSubscriptions, (v) => setState(() => _resetSubscriptions = v ?? false)),
+            _buildCheckbox('Portofolio Aset', _resetAssets, (v) => setState(() => _resetAssets = v ?? false)),
+            _buildCheckbox('Split Bill', _resetSplitBills, (v) => setState(() => _resetSplitBills = v ?? false)),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isProcessing ? null : () => Navigator.pop(context),
+          child: const Text('Batal'),
+        ),
+        FilledButton(
+          onPressed: _hasSelection && !_isProcessing ? _executeReset : null,
+          style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+          child: _isProcessing
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Hapus Terpilih'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCheckbox(String title, bool value, ValueChanged<bool?> onChanged) {
+    return CheckboxListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: Text(title, style: const TextStyle(fontSize: 14)),
+      value: value,
+      onChanged: _isProcessing ? null : onChanged,
+      controlAffinity: ListTileControlAffinity.leading,
     );
   }
 }

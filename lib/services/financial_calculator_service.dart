@@ -64,6 +64,22 @@ class RetirementResult {
   });
 }
 
+class InflationResult {
+  final double originalAmount;
+  final double futurePurchasingPower;
+  final double equivalentFutureAmount;
+  final double purchasingPowerLossPercent;
+  final int years;
+
+  InflationResult({
+    required this.originalAmount,
+    required this.futurePurchasingPower,
+    required this.equivalentFutureAmount,
+    required this.purchasingPowerLossPercent,
+    required this.years,
+  });
+}
+
 class FinancialCalculatorService {
   /// Calculate compound interest with monthly deposits
   static CompoundInterestResult calculateCompoundInterest({
@@ -209,6 +225,41 @@ class FinancialCalculatorService {
       targetNestEgg: targetNestEgg,
       monthlySavingsNeeded: monthlyNeeded.clamp(0.0, double.infinity),
       yearsToRetirement: years,
+    );
+  }
+
+  /// Calculate inflation impact on purchasing power
+  static InflationResult calculateInflation({
+    required double amount,
+    required double annualInflationRatePercent,
+    required int years,
+  }) {
+    if (amount <= 0 || years <= 0) {
+      return InflationResult(
+        originalAmount: amount,
+        futurePurchasingPower: amount,
+        equivalentFutureAmount: amount,
+        purchasingPowerLossPercent: 0,
+        years: years,
+      );
+    }
+
+    final rate = annualInflationRatePercent / 100.0;
+    // Nilai riil di masa depan: Amount / (1 + r)^years
+    final discountFactor = pow(1 + rate, years).toDouble();
+    final futurePurchasingPower = discountFactor > 0 ? (amount / discountFactor) : amount;
+    // Berapa uang yang dibutuhkan di masa depan agar bernilai sama: Amount * (1 + r)^years
+    final equivalentFutureAmount = amount * discountFactor;
+    final lossPercent = amount > 0
+        ? ((amount - futurePurchasingPower) / amount * 100).clamp(0.0, 100.0)
+        : 0.0;
+
+    return InflationResult(
+      originalAmount: amount,
+      futurePurchasingPower: futurePurchasingPower,
+      equivalentFutureAmount: equivalentFutureAmount,
+      purchasingPowerLossPercent: lossPercent,
+      years: years,
     );
   }
 }

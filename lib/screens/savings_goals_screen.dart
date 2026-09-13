@@ -382,6 +382,23 @@ class _DepositSavingsSheetState extends State<_DepositSavingsSheet> {
     final txProvider = Provider.of<TransactionProvider?>(context, listen: false);
     final walletProvider = Provider.of<WalletProvider?>(context, listen: false);
 
+    final oldRatio = widget.goal.targetAmount > 0
+        ? (widget.goal.currentAmount / widget.goal.targetAmount)
+        : 0.0;
+    final newAmount = widget.goal.currentAmount + amount;
+    final newRatio = widget.goal.targetAmount > 0
+        ? (newAmount / widget.goal.targetAmount)
+        : 1.0;
+
+    int? milestoneAchieved;
+    if (newRatio >= 1.0 && oldRatio < 1.0) {
+      milestoneAchieved = 100;
+    } else if (newRatio >= 0.75 && oldRatio < 0.75) {
+      milestoneAchieved = 75;
+    } else if (newRatio >= 0.50 && oldRatio < 0.50) {
+      milestoneAchieved = 50;
+    }
+
     await savingsProvider.addAmountToGoal(widget.goal.id, amount);
 
     if (_syncWallet && _selectedWalletId != null) {
@@ -403,6 +420,28 @@ class _DepositSavingsSheetState extends State<_DepositSavingsSheet> {
 
     if (mounted) {
       Navigator.pop(context);
+      if (milestoneAchieved != null) {
+        HapticFeedback.heavyImpact();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Text('🎉', style: TextStyle(fontSize: 20)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Milestone Tercapai! Target ${widget.goal.title} sudah $milestoneAchieved%!',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: milestoneAchieved == 100 ? AppColors.income : const Color(0xFF6366F1),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
     }
   }
 }

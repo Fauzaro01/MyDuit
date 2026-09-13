@@ -59,6 +59,9 @@ void main() {
       expect(stats.weekendDailyAvg, equals(125000.0));
       expect(stats.weekdayPercentage, closeTo(24.24, 0.1));
       expect(stats.weekendPercentage, closeTo(75.75, 0.1));
+      expect(stats.highestDay, isNotNull);
+      expect(stats.highestDay!.amount, equals(150000.0));
+      expect(stats.highestDay!.transactionCount, equals(1));
     });
 
     test('Handles empty transactions gracefully', () {
@@ -69,6 +72,7 @@ void main() {
       expect(stats.totalExpense, equals(0.0));
       expect(stats.weekdayPercentage, equals(0.0));
       expect(stats.weekendPercentage, equals(0.0));
+      expect(stats.highestDay, isNull);
     });
   });
 }

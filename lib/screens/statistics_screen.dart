@@ -1565,6 +1565,46 @@ class _WeekendWeekdayAnalysisCard extends StatelessWidget {
               ),
             ],
           ),
+          // Highest Spending Day Insight
+          if (stats.highestDay != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.expense.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.expense.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Text('🔥', style: TextStyle(fontSize: 20)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Hari Pengeluaran Tertinggi',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.expense,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${DateFormatter.fullDate(stats.highestDay!.date)} · ${CurrencyFormatter.format(stats.highestDay!.amount)} (${stats.highestDay!.transactionCount} transaksi)',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     ).animate().fadeIn(delay: 750.ms, duration: 400.ms);

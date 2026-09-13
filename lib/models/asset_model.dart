@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:uuid/uuid.dart';
 
 enum AssetType {
@@ -116,6 +117,14 @@ class AssetModel {
       notes: notes ?? this.notes,
       updatedAt: updatedAt ?? this.updatedAt,
     );
+  }
+
+  /// Estimasi nilai aset setelah [years] tahun dengan tingkat tahunan [annualRatePercent] (negatif jika depresiasi)
+  double estimateValuation({required int years, required double annualRatePercent}) {
+    if (years <= 0) return amount;
+    final rate = annualRatePercent / 100.0;
+    final factor = math.pow(1 + rate, years).toDouble();
+    return factor > 0 ? (amount * factor) : 0.0;
   }
 }
 

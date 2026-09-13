@@ -1399,4 +1399,41 @@ class DatabaseService {
     }
     return List.generate(maps.length, (i) => TransactionTemplateModel.fromMap(maps[i]));
   }
+
+  // ── Selective Data Reset ─────────────────────────────────
+  Future<void> clearTransactions() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('transactions');
+      await txn.delete('transfers');
+    });
+  }
+
+  Future<void> clearDebts() async {
+    final db = await database;
+    await db.delete('debts');
+  }
+
+  Future<void> clearSavingsGoals() async {
+    final db = await database;
+    await db.delete('savings_goals');
+  }
+
+  Future<void> clearSubscriptions() async {
+    final db = await database;
+    await db.delete('subscriptions');
+  }
+
+  Future<void> clearAssets() async {
+    final db = await database;
+    await db.delete('assets');
+  }
+
+  Future<void> clearSplitBills() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('split_participants');
+      await txn.delete('split_bills');
+    });
+  }
 }
