@@ -75,7 +75,7 @@ class WalletScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   sliver: SliverList.separated(
                     itemCount: walletProvider.wallets.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final wallet = walletProvider.wallets[index];
                       final balance =
@@ -117,7 +117,7 @@ class WalletScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     sliver: SliverList.separated(
                       itemCount: walletProvider.transfers.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final transfer = walletProvider.transfers[index];
                         final fromWallet = walletProvider.getWalletById(
@@ -143,7 +143,11 @@ class WalletScreen extends StatelessWidget {
                     ),
                   ),
                 ],
-                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 100 + MediaQuery.paddingOf(context).bottom,
+                  ),
+                ),
               ],
             ),
     );
@@ -166,6 +170,7 @@ class WalletScreen extends StatelessWidget {
     int selectedColor = isEdit
         ? wallet.colorValue
         : WalletModel.presetColors[0];
+    String selectedCurrency = isEdit ? wallet.currencyCode : 'IDR';
 
     showDialog(
       context: context,
@@ -194,6 +199,64 @@ class WalletScreen extends StatelessWidget {
                         hintText: 'Contoh: Tabungan',
                       ),
                       autofocus: !isEdit,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Currency Selector
+                    Text('Mata Uang', style: theme.textTheme.labelLarge),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedCurrency,
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'IDR',
+                          child: Text('IDR (Rp) - Rupiah'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'USD',
+                          child: Text('USD (\$) - US Dollar'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'EUR',
+                          child: Text('EUR (€) - Euro'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'SGD',
+                          child: Text('SGD (S\$) - Singapore Dollar'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'MYR',
+                          child: Text('MYR (RM) - Ringgit'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'JPY',
+                          child: Text('JPY (¥) - Japanese Yen'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'GBP',
+                          child: Text('GBP (£) - British Pound'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'AUD',
+                          child: Text('AUD (A\$) - Australian Dollar'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'SAR',
+                          child: Text('SAR (SR) - Saudi Riyal'),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => selectedCurrency = val);
+                      },
                     ),
                     const SizedBox(height: 20),
 
@@ -293,6 +356,7 @@ class WalletScreen extends StatelessWidget {
                           name: name,
                           emoji: selectedEmoji,
                           colorValue: selectedColor,
+                          currencyCode: selectedCurrency,
                         ),
                       );
                     } else {
@@ -301,6 +365,7 @@ class WalletScreen extends StatelessWidget {
                           name: name,
                           emoji: selectedEmoji,
                           colorValue: selectedColor,
+                          currencyCode: selectedCurrency,
                         ),
                       );
                     }
@@ -498,11 +563,35 @@ class _WalletCard extends StatelessWidget {
                           ),
                         ),
                       ],
+                      if (wallet.currencyCode != 'IDR') ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            wallet.currencyCode,
+                            style: TextStyle(
+                              color: theme.colorScheme.onPrimaryContainer,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    CurrencyFormatter.format(balance),
+                    CurrencyFormatter.formatWithCurrency(
+                      balance,
+                      currencyCode: wallet.currencyCode,
+                    ),
                     style: TextStyle(
                       color: balance >= 0
                           ? AppColors.income

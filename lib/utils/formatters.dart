@@ -14,7 +14,18 @@ class CurrencyFormatter {
     return _formatter.format(amount);
   }
 
+  static String formatWithCurrency(double amount, {String currencyCode = 'IDR'}) {
+    if (currencyCode.toUpperCase() == 'IDR') {
+      return _formatter.format(amount);
+    }
+    final isWhole = amount % 1 == 0;
+    return '$currencyCode ${amount.toStringAsFixed(isWhole ? 0 : 2)}';
+  }
+
   static String formatCompact(double amount) {
+    if (amount < 0) {
+      return '-${formatCompact(-amount)}';
+    }
     if (amount >= 1000000000) {
       return 'Rp ${(amount / 1000000000).toStringAsFixed(1)}M';
     } else if (amount >= 1000000) {
@@ -66,9 +77,9 @@ class RupiahInputFormatter extends TextInputFormatter {
     return buf.toString();
   }
 
-  /// Strip formatting and parse to double (handles both 1.200 and 1200).
+  /// Strip formatting and parse to double (handles both 1.200 and 1200, strips CR/DB/Rp).
   static double parse(String text) {
-    final clean = text.replaceAll('.', '').replaceAll(',', '').trim();
+    final clean = text.replaceAll(RegExp(r'[^\d\-]'), '');
     if (clean.isEmpty) return 0;
     return double.tryParse(clean) ?? 0;
   }

@@ -61,14 +61,26 @@ class DebtModel {
   double get progressPercent =>
       amount > 0 ? (paidAmount / amount).clamp(0.0, 1.0) : 0.0;
 
-  bool get isFullyPaid => paidAmount >= amount;
+  bool get isFullyPaid => isSettled || (amount > 0 && paidAmount >= amount);
 
-  bool get isOverdue =>
-      dueDate != null && !isSettled && DateTime.now().isAfter(dueDate!);
+  bool get isOverdue {
+    if (dueDate == null || isSettled) return false;
+    final endOfDueDate = DateTime(
+      dueDate!.year,
+      dueDate!.month,
+      dueDate!.day,
+      23,
+      59,
+      59,
+    );
+    return DateTime.now().isAfter(endOfDueDate);
+  }
 
   int? get daysUntilDue {
     if (dueDate == null || isSettled) return null;
-    return dueDate!.difference(DateTime.now()).inDays;
+    final dueDay = DateTime(dueDate!.year, dueDate!.month, dueDate!.day);
+    final nowDay = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    return dueDay.difference(nowDay).inDays;
   }
 
   Map<String, dynamic> toMap() {

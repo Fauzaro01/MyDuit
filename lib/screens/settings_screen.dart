@@ -7,6 +7,7 @@ import '../utils/formatters.dart';
 import '../providers/theme_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/app_lock_provider.dart';
+import '../providers/custom_category_provider.dart';
 import '../services/export_service.dart';
 import '../services/pdf_export_service.dart';
 import '../services/notification_service.dart';
@@ -18,6 +19,13 @@ import 'debt_screen.dart';
 import 'pin_lock_screen.dart';
 import 'custom_categories_screen.dart';
 import 'backup_screen.dart';
+import 'split_bill_screen.dart';
+import 'financial_health_screen.dart';
+import 'data_migration_screen.dart';
+import 'financial_calendar_screen.dart';
+import 'subscription_screen.dart';
+import 'net_worth_screen.dart';
+import 'financial_advisor_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -134,6 +142,111 @@ class SettingsScreen extends StatelessWidget {
               ),
               const Divider(height: 1, indent: 56),
               _SettingsTile(
+                icon: Icons.health_and_safety_outlined,
+                title: 'Kesehatan Finansial',
+                subtitle: 'Analisis skor 50/30/20 & proyeksi saldo',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const FinancialHealthScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.call_split_rounded,
+                title: 'Bagi Tagihan (Split Bill)',
+                subtitle: 'Patungan acara & pembagian rata/custom',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SplitBillScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.file_upload_outlined,
+                title: 'Impor Mutasi Bank & CSV',
+                subtitle: 'BCA, Mandiri, BRI & Universal CSV',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const DataMigrationScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.calendar_month_rounded,
+                title: 'Kalender Finansial & Heatmap',
+                subtitle: 'Peta intensitas belanja & tanggal jatuh tempo',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const FinancialCalendarScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.subscriptions_rounded,
+                title: 'Langganan & Beban Tetap',
+                subtitle: 'Pantau tagihan rutin & rasio biaya tetap',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SubscriptionScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.account_balance_rounded,
+                title: 'Kekayaan Bersih (Net Worth)',
+                subtitle: 'Portofolio aset investasi, kas & kewajiban',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const NetWorthScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.auto_awesome_rounded,
+                title: 'AI Financial Advisor',
+                subtitle: 'Deteksi anomali belanja & insight cerdas',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const FinancialAdvisorScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
                 icon: Icons.cloud_rounded,
                 title: 'Backup & Restore',
                 subtitle: 'Simpan data ke Google Drive',
@@ -163,7 +276,7 @@ class SettingsScreen extends StatelessWidget {
                     trailing: Switch.adaptive(
                       value: themeProvider.themeMode == ThemeMode.dark,
                       onChanged: (_) => themeProvider.toggleTheme(),
-                      activeColor: AppColors.primaryDark,
+                      activeTrackColor: AppColors.primaryDark,
                     ),
                   ),
                   const Divider(height: 1, indent: 56),
@@ -182,7 +295,7 @@ class SettingsScreen extends StatelessWidget {
                           );
                         }
                       },
-                      activeColor: isDark
+                      activeTrackColor: isDark
                           ? AppColors.primaryDark
                           : AppColors.primaryLight,
                     ),
@@ -237,7 +350,7 @@ class SettingsScreen extends StatelessWidget {
                               lockProvider.removePin();
                             }
                           },
-                          activeColor: isDark
+                          activeTrackColor: isDark
                               ? AppColors.primaryDark
                               : AppColors.primaryLight,
                         ),
@@ -294,7 +407,7 @@ class SettingsScreen extends StatelessWidget {
                                     }
                                   }
                                 : null,
-                            activeColor: isDark
+                            activeTrackColor: isDark
                                 ? AppColors.primaryDark
                                 : AppColors.primaryLight,
                           ),
@@ -326,6 +439,17 @@ class SettingsScreen extends StatelessWidget {
                               );
                             }
                           },
+                        ),
+                        const Divider(height: 1, indent: 56),
+                        _SettingsTile(
+                          icon: Icons.timer_outlined,
+                          title: 'Kunci Otomatis',
+                          subtitle: _getTimeoutLabel(lockProvider.lockTimeoutSeconds),
+                          trailing: const Icon(
+                            Icons.chevron_right_rounded,
+                            size: 22,
+                          ),
+                          onTap: () => _showLockTimeoutDialog(context, lockProvider),
                         ),
                       ],
                     ],
@@ -439,7 +563,13 @@ class SettingsScreen extends StatelessWidget {
 
   Future<void> _showExportDialog(BuildContext context) async {
     final provider = context.read<TransactionProvider>();
+    final customCatProvider =
+        Provider.of<CustomCategoryProvider?>(context, listen: false);
     final transactions = provider.transactions;
+
+    final customCategoryNames = <String, String>{
+      for (final c in customCatProvider?.categories ?? []) c.id: c.name,
+    };
 
     if (transactions.isEmpty) {
       if (context.mounted) {
@@ -465,7 +595,12 @@ class SettingsScreen extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          MediaQuery.paddingOf(ctx).bottom + 20,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -502,6 +637,7 @@ class SettingsScreen extends StatelessWidget {
                     transactions,
                     year: provider.selectedYear,
                     month: provider.selectedMonth,
+                    customCategoryNames: customCategoryNames,
                   );
                 } catch (e) {
                   if (context.mounted) {
@@ -541,6 +677,8 @@ class SettingsScreen extends StatelessWidget {
                     totalIncome: provider.totalIncome,
                     totalExpense: provider.totalExpense,
                     expenseCategoryTotals: provider.expenseCategoryTotals,
+                    expenseCustomTotals: provider.expenseCustomTotals,
+                    customCategoryNames: customCategoryNames,
                   );
                 } catch (e) {
                   if (context.mounted) {
@@ -584,6 +722,8 @@ class SettingsScreen extends StatelessWidget {
                     totalIncome: provider.totalIncome,
                     totalExpense: provider.totalExpense,
                     expenseCategoryTotals: provider.expenseCategoryTotals,
+                    expenseCustomTotals: provider.expenseCustomTotals,
+                    customCategoryNames: customCategoryNames,
                   );
                 } catch (e) {
                   if (context.mounted) {
@@ -610,6 +750,64 @@ class SettingsScreen extends StatelessWidget {
       case ThemeMode.dark:
         return 'Mode gelap';
     }
+  }
+
+  String _getTimeoutLabel(int seconds) {
+    switch (seconds) {
+      case 0:
+        return 'Langsung saat keluar';
+      case 60:
+        return 'Setelah 1 menit';
+      case 300:
+        return 'Setelah 5 menit';
+      case 900:
+        return 'Setelah 15 menit';
+      default:
+        return '$seconds detik';
+    }
+  }
+
+  void _showLockTimeoutDialog(BuildContext context, AppLockProvider lockProvider) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Kunci Otomatis'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _timeoutOption(ctx, lockProvider, 0, 'Langsung saat keluar'),
+            _timeoutOption(ctx, lockProvider, 60, 'Setelah 1 menit'),
+            _timeoutOption(ctx, lockProvider, 300, 'Setelah 5 menit'),
+            _timeoutOption(ctx, lockProvider, 900, 'Setelah 15 menit'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _timeoutOption(
+    BuildContext ctx,
+    AppLockProvider lockProvider,
+    int seconds,
+    String label,
+  ) {
+    final isSelected = lockProvider.lockTimeoutSeconds == seconds;
+    return ListTile(
+      title: Text(label),
+      trailing: isSelected
+          ? const Icon(Icons.check_rounded, color: AppColors.primaryLight)
+          : null,
+      onTap: () {
+        lockProvider.setLockTimeout(seconds);
+        Navigator.pop(ctx);
+      },
+    );
   }
 }
 
@@ -753,7 +951,7 @@ class _CurrencyFormatTileState extends State<_CurrencyFormatTile> {
             );
           }
         },
-        activeColor: widget.isDark
+        activeTrackColor: widget.isDark
             ? AppColors.primaryDark
             : AppColors.primaryLight,
       ),
@@ -838,7 +1036,7 @@ class _NotificationCardState extends State<_NotificationCard> {
           trailing: Switch.adaptive(
             value: _enabled,
             onChanged: _toggleNotification,
-            activeColor: widget.isDark
+            activeTrackColor: widget.isDark
                 ? AppColors.primaryDark
                 : AppColors.primaryLight,
           ),

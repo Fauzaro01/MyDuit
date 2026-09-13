@@ -29,14 +29,20 @@ class DebtProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  DebtProvider() {
+    loadDebts();
+  }
+
   Future<void> loadDebts() async {
     _isLoading = true;
     notifyListeners();
 
-    _debts = await _dbService.getAllDebts();
-
-    _isLoading = false;
-    notifyListeners();
+    try {
+      _debts = await _dbService.getAllDebts();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> addDebt(DebtModel debt) async {
@@ -55,7 +61,15 @@ class DebtProvider extends ChangeNotifier {
   }
 
   Future<void> addPayment(String debtId, double amount) async {
-    await _dbService.addDebtPayment(debtId, amount);
+    if (amount <= 0) return;
+    final debt = _debts.where((d) => d.id == debtId).firstOrNull;
+    if (debt == null || debt.isSettled) return;
+
+    final effectivePayment = amount > debt.remainingAmount ? debt.remainingAmount : amount;
+    await _dbService.addDebtPayment(debtId, effectivePayment);
+    if (debt.paidAmount + effectivePayment >= debt.amount) {
+      await _dbService.updateDebt(debt.copyWith(isSettled: true, paidAmount: debt.amount));
+    }
     await loadDebts();
   }
 

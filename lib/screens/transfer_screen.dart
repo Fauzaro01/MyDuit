@@ -7,6 +7,7 @@ import '../models/wallet_model.dart';
 import '../models/transfer_model.dart';
 import '../providers/wallet_provider.dart';
 import '../utils/formatters.dart';
+import '../widgets/common_widgets.dart';
 
 class TransferScreen extends StatefulWidget {
   const TransferScreen({super.key});
@@ -23,6 +24,7 @@ class _TransferScreenState extends State<TransferScreen> {
   WalletModel? _fromWallet;
   WalletModel? _toWallet;
   DateTime _date = DateTime.now();
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -54,11 +56,24 @@ class _TransferScreenState extends State<TransferScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Transfer Antar Dompet')),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
+      body: walletProvider.wallets.length < 2
+          ? const Center(
+              child: EmptyState(
+                message:
+                    'Dibutuhkan minimal 2 dompet untuk melakukan transfer.\nSilakan tambah dompet baru terlebih dahulu.',
+                icon: Icons.account_balance_wallet_outlined,
+              ),
+            )
+          : Form(
+              key: _formKey,
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  20,
+                  20,
+                  20 + MediaQuery.paddingOf(context).bottom,
+                ),
+                children: [
             // Transfer visualization
             Container(
               padding: const EdgeInsets.all(24),
@@ -233,9 +248,15 @@ class _TransferScreenState extends State<TransferScreen> {
               width: double.infinity,
               height: 56,
               child: ElevatedButton.icon(
-                onPressed: _submit,
-                icon: const Icon(Icons.swap_horiz_rounded),
-                label: const Text('Transfer Sekarang'),
+                onPressed: _isSubmitting ? null : _submit,
+                icon: _isSubmitting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.swap_horiz_rounded),
+                label: Text(_isSubmitting ? 'Memproses...' : 'Transfer Sekarang'),
               ),
             ),
             const SizedBox(height: 20),
@@ -257,7 +278,8 @@ class _TransferScreenState extends State<TransferScreen> {
     }
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
     if (!_formKey.currentState!.validate()) return;
 
     if (_fromWallet == null || _toWallet == null) {
@@ -286,28 +308,42 @@ class _TransferScreenState extends State<TransferScreen> {
       return;
     }
 
-    final amount = RupiahInputFormatter.parse(_amountController.text);
-    final transfer = TransferModel(
-      fromWalletId: _fromWallet!.id,
-      toWalletId: _toWallet!.id,
-      amount: amount,
-      note: _noteController.text.trim().isEmpty
-          ? null
-          : _noteController.text.trim(),
-      date: _date,
-    );
+    setState(() => _isSubmitting = true);
 
-    context.read<WalletProvider>().transferBetweenWallets(transfer);
+    try {
+      final amount = RupiahInputFormatter.parse(_amountController.text);
+      final transfer = TransferModel(
+        fromWalletId: _fromWallet!.id,
+        toWalletId: _toWallet!.id,
+        amount: amount,
+        note: _noteController.text.trim().isEmpty
+            ? null
+            : _noteController.text.trim(),
+        date: _date,
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Transfer ${CurrencyFormatter.format(amount)} berhasil!'),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        backgroundColor: AppColors.income,
-      ),
-    );
-    Navigator.pop(context);
+      await context.read<WalletProvider>().transferBetweenWallets(transfer);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Transfer ${CurrencyFormatter.format(amount)} berhasil!',
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            backgroundColor: AppColors.income,
+          ),
+        );
+        Navigator.pop(context);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 }
 

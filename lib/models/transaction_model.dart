@@ -103,6 +103,8 @@ class TransactionModel {
   final DateTime date;
   final String? note;
   final String? walletId;
+  final String? customCategoryId;
+  final List<String> tags;
 
   TransactionModel({
     String? id,
@@ -113,6 +115,8 @@ class TransactionModel {
     required this.date,
     this.note,
     this.walletId,
+    this.customCategoryId,
+    this.tags = const [],
   }) : id = id ?? const Uuid().v4();
 
   Map<String, dynamic> toMap() {
@@ -125,10 +129,17 @@ class TransactionModel {
       'date': date.millisecondsSinceEpoch,
       'note': note,
       'walletId': walletId,
+      'customCategoryId': customCategoryId,
+      'tags': tags.isNotEmpty ? tags.join(',') : null,
     };
   }
 
   factory TransactionModel.fromMap(Map<String, dynamic> map) {
+    final tagsStr = map['tags'] as String?;
+    final parsedTags = tagsStr != null && tagsStr.isNotEmpty
+        ? tagsStr.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList()
+        : <String>[];
+
     return TransactionModel(
       id: map['id'] as String,
       title: map['title'] as String,
@@ -138,6 +149,8 @@ class TransactionModel {
       date: DateTime.fromMillisecondsSinceEpoch(map['date'] as int),
       note: map['note'] as String?,
       walletId: map['walletId'] as String?,
+      customCategoryId: map['customCategoryId'] as String?,
+      tags: parsedTags,
     );
   }
 
@@ -150,6 +163,8 @@ class TransactionModel {
     DateTime? date,
     String? note,
     String? walletId,
+    String? customCategoryId,
+    List<String>? tags,
   }) {
     return TransactionModel(
       id: id ?? this.id,
@@ -160,6 +175,8 @@ class TransactionModel {
       date: date ?? this.date,
       note: note ?? this.note,
       walletId: walletId ?? this.walletId,
+      customCategoryId: customCategoryId ?? this.customCategoryId,
+      tags: tags ?? this.tags,
     );
   }
 }

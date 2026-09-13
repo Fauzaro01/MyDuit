@@ -4,7 +4,10 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../models/savings_goal_model.dart';
+import '../models/transaction_model.dart';
 import '../providers/savings_provider.dart';
+import '../providers/transaction_provider.dart';
+import '../providers/wallet_provider.dart';
 import '../utils/formatters.dart';
 
 class SavingsGoalsScreen extends StatefulWidget {
@@ -167,95 +170,215 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
   }
 
   void _showAddAmountSheet(BuildContext context, SavingsGoalModel goal) {
-    final controller = TextEditingController();
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          MediaQuery.of(ctx).viewInsets.bottom + 20,
-        ),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: theme.dividerColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+      builder: (_) => _DepositSavingsSheet(goal: goal),
+    );
+  }
+}
+
+// ── Deposit Savings Bottom Sheet ─────────────────────────────
+class _DepositSavingsSheet extends StatefulWidget {
+  final SavingsGoalModel goal;
+  const _DepositSavingsSheet({required this.goal});
+
+  @override
+  State<_DepositSavingsSheet> createState() => _DepositSavingsSheetState();
+}
+
+class _DepositSavingsSheetState extends State<_DepositSavingsSheet> {
+  final _controller = TextEditingController();
+  bool _syncWallet = true;
+  String? _selectedWalletId;
+
+  @override
+  void initState() {
+    super.initState();
+    final walletProvider = Provider.of<WalletProvider?>(context, listen: false);
+    final wallets = walletProvider?.wallets ?? [];
+    if (wallets.isNotEmpty) {
+      _selectedWalletId = walletProvider?.activeWallet?.id ?? wallets.first.id;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final walletProvider = Provider.of<WalletProvider?>(context);
+    final wallets = walletProvider?.wallets ?? [];
+
+    final bottomPadding = MediaQuery.of(context).viewInsets.bottom +
+        MediaQuery.paddingOf(context).bottom +
+        20;
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, bottomPadding),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: theme.dividerColor,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(height: 20),
-            Text('Tambah Tabungan', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 8),
-            Text(
-              '${goal.emoji} ${goal.title} · Sisa ${CurrencyFormatter.format(goal.remainingAmount)}',
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: controller,
-              decoration: InputDecoration(
-                labelText: 'Jumlah',
-                prefixIcon: const Icon(Icons.payments_rounded, size: 20),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
+          ),
+          const SizedBox(height: 20),
+          Text('Tambah Tabungan', style: theme.textTheme.titleLarge),
+          const SizedBox(height: 8),
+          Text(
+            '${widget.goal.emoji} ${widget.goal.title} · Sisa ${CurrencyFormatter.format(widget.goal.remainingAmount)}',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _controller,
+            decoration: InputDecoration(
+              labelText: 'Jumlah',
+              prefixText: CurrencyInputService.isFormatted ? 'Rp ' : null,
+              prefixIcon: const Icon(Icons.payments_rounded, size: 20),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
-              keyboardType: TextInputType.number,
-              inputFormatters: CurrencyInputService.isFormatted
-                  ? [RupiahInputFormatter()]
-                  : [FilteringTextInputFormatter.digitsOnly],
-              autofocus: true,
             ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: FilledButton(
-                onPressed: () {
-                  final amount = RupiahInputFormatter.parse(controller.text);
-                  if (amount > 0) {
-                    context.read<SavingsProvider>().addAmountToGoal(
-                      goal.id,
-                      amount,
-                    );
-                    Navigator.pop(ctx);
-                  }
-                },
-                style: FilledButton.styleFrom(
-                  backgroundColor: isDark
-                      ? AppColors.primaryDark
-                      : AppColors.primaryLight,
-                  foregroundColor: isDark ? Colors.black : Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+            keyboardType: TextInputType.number,
+            inputFormatters: CurrencyInputService.isFormatted
+                ? [RupiahInputFormatter()]
+                : [FilteringTextInputFormatter.digitsOnly],
+            autofocus: true,
+          ),
+          if (wallets.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: Checkbox(
+                    value: _syncWallet,
+                    onChanged: (v) => setState(() => _syncWallet = v ?? false),
+                    activeColor: theme.colorScheme.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
                   ),
                 ),
-                child: const Text(
-                  'Simpan',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _syncWallet = !_syncWallet),
+                    child: Text(
+                      'Potong dari saldo dompet',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_syncWallet) ...[
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _selectedWalletId,
+                decoration: InputDecoration(
+                  labelText: 'Pilih Dompet',
+                  prefixIcon: const Icon(Icons.account_balance_wallet_rounded, size: 20),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                ),
+                items: wallets.map((w) {
+                  final bal = walletProvider?.walletBalances[w.id] ?? 0.0;
+                  return DropdownMenuItem(
+                    value: w.id,
+                    child: Text(
+                      '${w.emoji} ${w.name} (${CurrencyFormatter.formatCompact(bal)})',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (val) => setState(() => _selectedWalletId = val),
+              ),
+            ],
+          ],
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: FilledButton(
+              onPressed: _saveDeposit,
+              style: FilledButton.styleFrom(
+                backgroundColor: isDark
+                    ? AppColors.primaryDark
+                    : AppColors.primaryLight,
+                foregroundColor: isDark ? Colors.black : Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
+              child: const Text(
+                'Simpan',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+  }
+
+  void _saveDeposit() async {
+    final amount = RupiahInputFormatter.parse(_controller.text);
+    if (amount <= 0) return;
+
+    final savingsProvider = context.read<SavingsProvider>();
+    final txProvider = Provider.of<TransactionProvider?>(context, listen: false);
+    final walletProvider = Provider.of<WalletProvider?>(context, listen: false);
+
+    await savingsProvider.addAmountToGoal(widget.goal.id, amount);
+
+    if (_syncWallet && _selectedWalletId != null) {
+      if (txProvider != null) {
+        await txProvider.addTransaction(
+          TransactionModel(
+            title: 'Tabungan: ${widget.goal.title}',
+            amount: amount,
+            type: TransactionType.expense,
+            category: TransactionCategory.other,
+            walletId: _selectedWalletId,
+            date: DateTime.now(),
+            note: 'Setor ke tabungan ${widget.goal.emoji} ${widget.goal.title}',
+          ),
+        );
+        await walletProvider?.refreshBalances();
+      }
+    }
+
+    if (mounted) {
+      Navigator.pop(context);
+    }
   }
 }
 
@@ -560,7 +683,12 @@ class _AddGoalSheetState extends State<_AddGoalSheet> {
       child: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            MediaQuery.paddingOf(context).bottom + 32,
+          ),
           shrinkWrap: true,
           children: [
             Center(

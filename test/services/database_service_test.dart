@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:myduit/models/transaction_model.dart';
 import 'package:myduit/models/budget_model.dart';
 import 'package:myduit/models/wallet_model.dart';
@@ -17,7 +16,7 @@ void main() {
     databaseFactory = databaseFactoryFfi;
     db = await openDatabase(
       inMemoryDatabasePath,
-      version: 3,
+      version: 8,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE wallets(
@@ -26,6 +25,7 @@ void main() {
             emoji TEXT NOT NULL DEFAULT '💰',
             colorValue INTEGER NOT NULL DEFAULT 855405427,
             isDefault INTEGER NOT NULL DEFAULT 0,
+            currencyCode TEXT NOT NULL DEFAULT 'IDR',
             createdAt INTEGER NOT NULL
           )
         ''');
@@ -39,6 +39,8 @@ void main() {
             date INTEGER NOT NULL,
             note TEXT,
             walletId TEXT,
+            customCategoryId TEXT,
+            tags TEXT,
             FOREIGN KEY (walletId) REFERENCES wallets(id)
           )
         ''');
@@ -49,6 +51,8 @@ void main() {
             monthlyLimit REAL NOT NULL,
             year INTEGER NOT NULL,
             month INTEGER NOT NULL,
+            customCategoryId TEXT,
+            isRollover INTEGER NOT NULL DEFAULT 0,
             UNIQUE(category, year, month)
           )
         ''');
@@ -71,6 +75,7 @@ void main() {
           'emoji': '💰',
           'colorValue': 0xFF0D9373,
           'isDefault': 1,
+          'currencyCode': 'IDR',
           'createdAt': DateTime.now().millisecondsSinceEpoch,
         });
       },

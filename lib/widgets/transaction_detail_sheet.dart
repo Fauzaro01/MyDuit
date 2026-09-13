@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../models/transaction_model.dart';
+import '../providers/custom_category_provider.dart';
+import '../providers/wallet_provider.dart';
 import '../utils/formatters.dart';
 import '../screens/add_transaction_screen.dart';
 
@@ -14,6 +18,22 @@ void showTransactionDetail(
   final isDark = theme.brightness == Brightness.dark;
   final isIncome = transaction.type == TransactionType.income;
   final accentColor = isIncome ? AppColors.income : AppColors.expense;
+  final customCatProvider =
+      Provider.of<CustomCategoryProvider?>(context, listen: false);
+  final customCat = (transaction.customCategoryId != null &&
+          customCatProvider != null)
+      ? customCatProvider.getCategoryById(transaction.customCategoryId!)
+      : null;
+  final iconText = customCat?.emoji ?? transaction.category.icon;
+  final categoryLabel = customCat?.name ?? transaction.category.label;
+
+  final walletProvider =
+      Provider.of<WalletProvider?>(context, listen: false);
+  final wallet = transaction.walletId != null
+      ? walletProvider?.getWalletById(transaction.walletId!)
+      : null;
+
+  final bottomPadding = MediaQuery.paddingOf(context).bottom;
 
   showModalBottomSheet(
     context: context,
@@ -24,7 +44,7 @@ void showTransactionDetail(
         color: isDark ? AppColors.cardDark : AppColors.cardLight,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+      padding: EdgeInsets.fromLTRB(24, 12, 24, 24 + bottomPadding),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -51,7 +71,7 @@ void showTransactionDetail(
             ),
             alignment: Alignment.center,
             child: Text(
-              transaction.category.icon,
+              iconText,
               style: const TextStyle(fontSize: 32),
             ),
           ).animate().scale(
@@ -63,13 +83,34 @@ void showTransactionDetail(
           const SizedBox(height: 16),
 
           // Amount
-          Text(
-            '${isIncome ? '+' : '-'} ${CurrencyFormatter.format(transaction.amount)}',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
-              color: accentColor,
-              letterSpacing: -0.5,
+          InkWell(
+            onTap: () {
+              Clipboard.setData(
+                ClipboardData(
+                  text:
+                      '${transaction.title}: ${CurrencyFormatter.format(transaction.amount)} (${DateFormatter.fullDate(transaction.date)})',
+                ),
+              );
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Detail transaksi disalin ke clipboard 📋'),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Text(
+                '${isIncome ? '+' : '-'} ${CurrencyFormatter.format(transaction.amount)}',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: accentColor,
+                  letterSpacing: -0.5,
+                ),
+              ),
             ),
           ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
           const SizedBox(height: 4),
@@ -86,8 +127,7 @@ void showTransactionDetail(
           _DetailRow(
             icon: Icons.category_outlined,
             label: 'Kategori',
-            value:
-                '${transaction.category.icon}  ${transaction.category.label}',
+            value: '$iconText  $categoryLabel',
             isDark: isDark,
           ),
           const SizedBox(height: 12),
@@ -107,6 +147,77 @@ void showTransactionDetail(
             value: DateFormatter.fullDate(transaction.date),
             isDark: isDark,
           ),
+          if (wallet != null) ...[
+            const SizedBox(height: 12),
+            _DetailRow(
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'Dompet',
+              value: '${wallet.emoji}  ${wallet.name}',
+              isDark: isDark,
+            ),
+          ],
+          if (transaction.tags.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.cardAltDark : AppColors.cardAltLight,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.tag_rounded,
+                    size: 20,
+                    color: isDark ? Colors.white60 : Colors.black54,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Tag',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      alignment: WrapAlignment.end,
+                      children: transaction.tags.map((tag) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: (isDark
+                                    ? AppColors.primaryDark
+                                    : AppColors.primaryLight)
+                                .withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '#$tag',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? AppColors.primaryDark
+                                  : AppColors.primaryLight,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (transaction.note != null && transaction.note!.isNotEmpty) ...[
             const SizedBox(height: 12),
             _DetailRow(
@@ -240,22 +351,23 @@ class _DetailRow extends StatelessWidget {
           Icon(
             icon,
             size: 20,
-            color: isDark
-                ? AppColors.textSecondaryDark
-                : AppColors.textSecondaryLight,
+            color: isDark ? Colors.white60 : Colors.black54,
           ),
           const SizedBox(width: 12),
           Text(
             label,
-            style: theme.textTheme.bodyMedium?.copyWith(fontSize: 13),
+            style: TextStyle(
+              fontSize: 14,
+              color: isDark ? Colors.white60 : Colors.black54,
+            ),
           ),
           const Spacer(),
           Flexible(
             child: Text(
               value,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontSize: 13,
+              style: theme.textTheme.titleSmall?.copyWith(
                 color: valueColor,
+                fontWeight: FontWeight.w600,
               ),
               textAlign: TextAlign.end,
               overflow: TextOverflow.ellipsis,

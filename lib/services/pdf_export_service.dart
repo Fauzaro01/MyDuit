@@ -7,6 +7,12 @@ import 'package:share_plus/share_plus.dart';
 import '../models/transaction_model.dart';
 import '../utils/formatters.dart';
 
+class _PdfCategoryItem {
+  final String label;
+  final double amount;
+  const _PdfCategoryItem(this.label, this.amount);
+}
+
 class PdfExportService {
   static Future<void> exportAndShare(
     List<TransactionModel> transactions, {
@@ -15,9 +21,17 @@ class PdfExportService {
     required double totalIncome,
     required double totalExpense,
     required Map<TransactionCategory, double> expenseCategoryTotals,
+    Map<String, double>? expenseCustomTotals,
+    Map<String, String>? customCategoryNames,
   }) async {
     final pdf = pw.Document();
     final monthName = DateFormatter.monthYear(year, month);
+
+    final categoryItems = _buildCategoryItems(
+      expenseCategoryTotals,
+      expenseCustomTotals,
+      customCategoryNames,
+    );
 
     pdf.addPage(
       pw.MultiPage(
@@ -31,13 +45,13 @@ class PdfExportService {
           pw.SizedBox(height: 16),
 
           // Category breakdown
-          if (expenseCategoryTotals.isNotEmpty) ...[
-            _buildCategorySection(expenseCategoryTotals, totalExpense),
+          if (categoryItems.isNotEmpty) ...[
+            _buildCategorySection(categoryItems, totalExpense),
             pw.SizedBox(height: 16),
           ],
 
           // Transaction table
-          _buildTransactionTable(transactions),
+          _buildTransactionTable(transactions, customCategoryNames),
         ],
       ),
     );
@@ -59,8 +73,15 @@ class PdfExportService {
     required double totalIncome,
     required double totalExpense,
     required Map<TransactionCategory, double> expenseCategoryTotals,
+    Map<String, double>? expenseCustomTotals,
+    Map<String, String>? customCategoryNames,
   }) async {
     final monthName = DateFormatter.monthYear(year, month);
+    final categoryItems = _buildCategoryItems(
+      expenseCategoryTotals,
+      expenseCustomTotals,
+      customCategoryNames,
+    );
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async {
@@ -74,17 +95,42 @@ class PdfExportService {
             build: (context) => [
               _buildSummarySection(totalIncome, totalExpense),
               pw.SizedBox(height: 16),
-              if (expenseCategoryTotals.isNotEmpty) ...[
-                _buildCategorySection(expenseCategoryTotals, totalExpense),
+              if (categoryItems.isNotEmpty) ...[
+                _buildCategorySection(categoryItems, totalExpense),
                 pw.SizedBox(height: 16),
               ],
-              _buildTransactionTable(transactions),
+              _buildTransactionTable(transactions, customCategoryNames),
             ],
           ),
         );
         return pdf.save();
       },
     );
+  }
+
+  static List<_PdfCategoryItem> _buildCategoryItems(
+    Map<TransactionCategory, double> expenseCategoryTotals,
+    Map<String, double>? expenseCustomTotals,
+    Map<String, String>? customCategoryNames,
+  ) {
+    final List<_PdfCategoryItem> items = [];
+    expenseCategoryTotals.forEach((cat, amt) {
+      if (amt > 0) {
+        items.add(_PdfCategoryItem(_cleanText(cat.label), amt));
+      }
+    });
+
+    if (expenseCustomTotals != null && customCategoryNames != null) {
+      expenseCustomTotals.forEach((catId, amt) {
+        if (amt > 0) {
+          final name = customCategoryNames[catId] ?? 'Kustom';
+          items.add(_PdfCategoryItem(_cleanText(name), amt));
+        }
+      });
+    }
+
+    items.sort((a, b) => b.amount.compareTo(a.amount));
+    return items;
   }
 
   // ── Header ────────────────────────────────────────────────
@@ -186,12 +232,9 @@ class PdfExportService {
 
   // ── Category Breakdown ────────────────────────────────────
   static pw.Widget _buildCategorySection(
-    Map<TransactionCategory, double> categoryTotals,
+    List<_PdfCategoryItem> categoryItems,
     double totalExpense,
   ) {
-    final sorted = categoryTotals.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -200,9 +243,9 @@ class PdfExportService {
           style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
         ),
         pw.SizedBox(height: 8),
-        ...sorted.map((entry) {
+        ...categoryItems.map((entry) {
           final pct = totalExpense > 0
-              ? (entry.value / totalExpense * 100).toStringAsFixed(1)
+              ? (entry.amount / totalExpense * 100).toStringAsFixed(1)
               : '0';
           return pw.Container(
             padding: const pw.EdgeInsets.symmetric(vertical: 3),
@@ -211,7 +254,7 @@ class PdfExportService {
                 pw.SizedBox(
                   width: 100,
                   child: pw.Text(
-                    entry.key.label,
+                    entry.label,
                     style: const pw.TextStyle(fontSize: 10),
                   ),
                 ),
@@ -228,8 +271,7 @@ class PdfExportService {
                       pw.Container(
                         height: 12,
                         width:
-                            (totalExpense > 0 ? entry.value / totalExpense : 0)
-                                .toDouble() *
+                            (totalExpense > 0 ? (entry.amount / totalExpense).clamp(0.0, 1.0) : 0.0) *
                             200,
                         decoration: pw.BoxDecoration(
                           color: PdfColors.teal300,
@@ -243,7 +285,7 @@ class PdfExportService {
                 pw.SizedBox(
                   width: 80,
                   child: pw.Text(
-                    CurrencyFormatter.format(entry.value),
+                    CurrencyFormatter.format(entry.amount),
                     style: const pw.TextStyle(fontSize: 10),
                     textAlign: pw.TextAlign.right,
                   ),
@@ -268,7 +310,10 @@ class PdfExportService {
   }
 
   // ── Transaction Table ─────────────────────────────────────
-  static pw.Widget _buildTransactionTable(List<TransactionModel> transactions) {
+  static pw.Widget _buildTransactionTable(
+    List<TransactionModel> transactions,
+    Map<String, String>? customCategoryNames,
+  ) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -293,10 +338,17 @@ class PdfExportService {
           ),
           headers: ['Tanggal', 'Judul', 'Kategori', 'Tipe', 'Jumlah'],
           data: transactions.map((tx) {
+            final cleanTitle = _cleanText(tx.title);
+            final categoryLabel = _cleanText(
+              (tx.customCategoryId != null && customCategoryNames != null)
+                  ? (customCategoryNames[tx.customCategoryId] ?? tx.category.label)
+                  : tx.category.label,
+            );
+
             return [
               DateFormatter.shortDate(tx.date),
-              tx.title,
-              tx.category.label,
+              cleanTitle.isEmpty ? '-' : cleanTitle,
+              categoryLabel.isEmpty ? '-' : categoryLabel,
               tx.type == TransactionType.income ? 'Masuk' : 'Keluar',
               CurrencyFormatter.format(tx.amount),
             ];
@@ -304,5 +356,17 @@ class PdfExportService {
         ),
       ],
     );
+  }
+
+  static String _cleanText(String text) {
+    return text
+        .replaceAll(
+          RegExp(
+            r'[\u{1F300}-\u{1FAFF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}]',
+            unicode: true,
+          ),
+          '',
+        )
+        .trim();
   }
 }

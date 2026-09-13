@@ -37,6 +37,14 @@ class TransactionProvider extends ChangeNotifier {
   Map<TransactionCategory, double> get expenseCategoryTotals =>
       _expenseCategoryTotals;
 
+  int _loadVersion = 0;
+
+  Map<String, double> _incomeCustomTotals = {};
+  Map<String, double> get incomeCustomTotals => _incomeCustomTotals;
+
+  Map<String, double> _expenseCustomTotals = {};
+  Map<String, double> get expenseCustomTotals => _expenseCustomTotals;
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
@@ -56,55 +64,67 @@ class TransactionProvider extends ChangeNotifier {
   }
 
   Future<void> loadData() async {
+    final currentVersion = ++_loadVersion;
     _isLoading = true;
     notifyListeners();
 
-    await Future.wait([
-      _loadTransactions(),
-      _loadTotals(),
-      _loadCategoryTotals(),
-      _loadBudgets(),
+    final results = await Future.wait([
+      _dbService.getTransactionsByMonth(_selectedYear, _selectedMonth),
+      _dbService.getTotalByTypeAndMonth(
+        TransactionType.income,
+        _selectedYear,
+        _selectedMonth,
+      ),
+      _dbService.getTotalByTypeAndMonth(
+        TransactionType.expense,
+        _selectedYear,
+        _selectedMonth,
+      ),
+      _dbService.getCategoryTotals(
+        TransactionType.income,
+        _selectedYear,
+        _selectedMonth,
+      ),
+      _dbService.getCategoryTotals(
+        TransactionType.expense,
+        _selectedYear,
+        _selectedMonth,
+      ),
+      _dbService.getCustomCategoryTotals(
+        TransactionType.income,
+        _selectedYear,
+        _selectedMonth,
+      ),
+      _dbService.getCustomCategoryTotals(
+        TransactionType.expense,
+        _selectedYear,
+        _selectedMonth,
+      ),
+      _dbService.getBudgets(_selectedYear, _selectedMonth),
     ]);
+
+    if (currentVersion != _loadVersion) return;
+
+    _transactions = results[0] as List<TransactionModel>;
+    _totalIncome = results[1] as double;
+    _totalExpense = results[2] as double;
+    _incomeCategoryTotals = results[3] as Map<TransactionCategory, double>;
+    _expenseCategoryTotals = results[4] as Map<TransactionCategory, double>;
+    _incomeCustomTotals = results[5] as Map<String, double>;
+    _expenseCustomTotals = results[6] as Map<String, double>;
+    _budgets = results[7] as List<BudgetModel>;
 
     _isLoading = false;
     notifyListeners();
-  }
 
-  Future<void> _loadTransactions() async {
-    _transactions = await _dbService.getTransactionsByMonth(
-      _selectedYear,
-      _selectedMonth,
-    );
-  }
-
-  Future<void> _loadTotals() async {
-    _totalIncome = await _dbService.getTotalByTypeAndMonth(
-      TransactionType.income,
-      _selectedYear,
-      _selectedMonth,
-    );
-    _totalExpense = await _dbService.getTotalByTypeAndMonth(
-      TransactionType.expense,
-      _selectedYear,
-      _selectedMonth,
-    );
-  }
-
-  Future<void> _loadCategoryTotals() async {
-    _incomeCategoryTotals = await _dbService.getCategoryTotals(
-      TransactionType.income,
-      _selectedYear,
-      _selectedMonth,
-    );
-    _expenseCategoryTotals = await _dbService.getCategoryTotals(
-      TransactionType.expense,
-      _selectedYear,
-      _selectedMonth,
-    );
+    if (_searchQuery.isNotEmpty) {
+      await search(_searchQuery);
+    }
   }
 
   Future<void> _loadBudgets() async {
     _budgets = await _dbService.getBudgets(_selectedYear, _selectedMonth);
+    notifyListeners();
   }
 
   // ── Transaction CRUD ──

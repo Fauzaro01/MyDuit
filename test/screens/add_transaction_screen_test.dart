@@ -84,7 +84,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Makan Siang'), findsOneWidget);
-      expect(find.text('25000'), findsOneWidget);
+      expect(find.text('25.000'), findsOneWidget);
       // Note field is below the fold, scroll to it
       await tester.scrollUntilVisible(
         find.text('Test note'),

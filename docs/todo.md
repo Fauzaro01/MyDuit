@@ -1,0 +1,65 @@
+# Daftar Perbaikan Bug & Peningkatan Kode (TODO)
+
+Daftar tugas teridentifikasi dari analisis kode MyDuit:
+
+- [x] **Task 1**: Perbaiki edge-case penanggalan akhir bulan pada `CashflowForecastService` (`_isDueOnDate` untuk tanggal 29/30/31 di bulan pendek).
+- [x] **Task 2**: Perbaiki rounding discrepancy pada `SplitBillService.calculateEqualSplit` agar total akumulasi tagihan anggota selalu tepat sama dengan `grandTotal`.
+- [x] **Task 3**: Tambahkan penanganan zero-rate & safe fallback pada `CurrencyRateService.convert` untuk mencegah NaN/Infinity.
+- [x] **Task 4**: Tingkatkan parser CSV `BankStatementParserService._splitCsvLine` untuk mendukung nilai kolom dengan koma di dalam tanda kutip (`"..."`).
+- [x] **Task 5**: Dukung klasifikasi kategori kustom pada `FinancialHealthService._isNeedCategory` agar skor 50/30/20 lebih akurat.
+- [x] **Task 6**: Perbaiki presisi formula `monthlyCost` pada `SubscriptionModel` untuk siklus mingguan.
+- [x] **Task 7**: Tambahkan parsing nama bulan bahasa Indonesia pada `ReceiptParserService._extractDate` (misal: "12 Januari 2026", "24 Feb 2026", "10-Okt-25").
+- [x] **Task 8**: Tambahkan proteksi validasi batas nominal pembayaran pada `DebtProvider.addPayment` agar tidak bernilai negatif atau melebihi sisa hutang.
+- [x] **Task 9**: Tambahkan helper penentuan periode bulan sebelumnya `getPreviousPeriod(year, month)` pada `BudgetRolloverService` untuk transisi Januari ke Desember tahun sebelumnya.
+- [x] **Task 10**: Refaktor delegasi `SubscriptionProvider.totalMonthlyCost` ke `SubscriptionModel.monthlyCost` agar terstandarisasi.
+- [x] **Task 11**: Tambahkan validasi nominal non-positif pada `SavingsProvider.addAmountToGoal`.
+- [x] **Task 12**: Perbarui timestamp `updatedAt: DateTime.now()` saat update aset di `AssetProvider.updateAsset`.
+- [x] **Task 13**: Bersihkan emoji dan karakter non-standar pada kategori kustom dan judul di `PdfExportService` untuk mencegah kegagalan render PDF.
+- [x] **Task 14**: Pertahankan anchor day asli (`startDate.day`) pada `RecurringTransactionModel.nextOccurrence` agar tanggal berulang tidak bergeser setelah melewati bulan pendek.
+- [x] **Task 15**: Sinkronkan ulang `search(_searchQuery)` otomatis di `TransactionProvider.loadData` agar hasil pencarian tidak basi saat data berubah.
+- [x] **Task 16**: Gunakan pencarian aman `firstOrNull` di `SplitBillProvider.toggleSettleBill` untuk mencegah unhandled `StateError`.
+- [x] **Task 17**: Tambahkan pengecekan aman null & default wallet pada `WalletProvider.deleteWallet`.
+- [x] **Task 18**: Tampilkan `EmptyState` informatif pada `TransferScreen` ketika jumlah dompet kurang dari 2.
+- [x] **Task 19**: Tambahkan dynamic bottom padding pada `_DepositSavingsSheet` dan `_AddGoalSheet` di `SavingsGoalsScreen` untuk adaptasi navigation gesture bar perangkat modern.
+- [x] **Task 20**: Perbaiki kalkulasi tanggal jatuh tempo `isOverdue` & `daysUntilDue` di `DebtModel` agar tidak menandai hutang yang jatuh tempo hari ini sebagai terlambat sebelum hari berganti.
+- [x] **Task 21**: Tangani penghapusan anggaran otomatis pada `BudgetScreen` saat pengguna menyetel nilai batas pengeluaran ke 0 atau mengosongkannya.
+- [x] **Task 22**: Tambahkan dynamic bottom safe padding pada `_DebtPaymentSheet` dan `_AddDebtSheet` di `DebtScreen`.
+- [x] **Task 23**: Tambahkan dynamic bottom safe padding pada `FinancialAdvisorScreen` agar konten scroll tidak terpotong di bagian bawah layar.
+- [x] **Task 24**: Cegah pembagian angka nol (NaN/Infinity) pada kalkulasi rasio persentase kebutuhan/keinginan dan dana darurat di `FinancialHealthService.evaluate`.
+- [x] **Task 25**: Tambahkan dynamic bottom padding dan validasi case-insensitive saat menambah nama anggota pada `CreateSplitBillScreen`.
+- [x] **Task 26**: Standarkan pengurutan alfabetis otomatis pada `TagProvider` (`loadTags` & `addTag`).
+- [x] **Task 27**: Sinkronkan navigasi bulan `FinancialCalendarScreen` dengan `TransactionProvider.setMonth` agar data transaksi dan heatmap bulanan konsisten.
+- [x] **Task 28**: Tambahkan dynamic bottom safe padding pada `BackupScreen` ListView.
+- [x] **Task 29**: Tambahkan flag guard `_isCompleting` pada `OnboardingScreen._completeOnboarding` guna mencegah double-trigger/race condition saat tombol diklik ganda.
+- [x] **Task 30**: Atasi parsing overcounting 100x pada `ReceiptParserService` dengan menormalisasi pemisah desimal 2 digit trailing (`[,.]\d{2}$`).
+- [x] **Task 31**: Dukung format ISO tanggal `YYYY-MM-DD` dan `YYYY/MM/DD` pada `BankStatementParserService` sebelum parsing DMY.
+- [x] **Task 32**: Normalisasi tanggal murni (`DateTime(y, m, d)`) pada `CashflowForecastService._isDueOnDate` untuk eliminasi pergeseran jam/menit.
+- [x] **Task 33**: Reset `_pausedAt = null` pada `AppLockProvider.lock()` agar timestamp pause tidak basi saat penguncian manual.
+- [x] **Task 34**: Inisialisasi `_lastRefreshed = DateTime.now()` pada `CurrencyProvider.loadData` saat memuat kurs tersimpan.
+- [x] **Task 35**: Bungkus `_isImporting` dalam `try-finally` dan tambahkan dynamic bottom safe padding pada `DataMigrationScreen`.
+- [x] **Task 36**: Reset `_customCategoryId = null` saat berganti tab Income/Expense di `AddTransactionScreen`.
+- [x] **Task 37**: Tambahkan guard `topEntry.value > 0` pada `InsightsCard` agar chip pengeluaran terbesar hanya muncul jika ada belanja riil.
+- [x] **Task 38**: Tambahkan salin rincian transaksi ke clipboard saat nominal diklik pada `TransactionDetailSheet`.
+- [x] **Task 39**: Tambahkan gesture tap-to-skip pada `SplashScreen` agar pengguna dapat melewati animasi loading dengan cepat.
+- [x] **Task 40**: Tambahkan dynamic bottom padding pada export sheet di `SettingsScreen`.
+- [x] **Task 41**: Dukung format angka negatif pada `CurrencyFormatter.formatCompact`.
+- [x] **Task 42**: Tambahkan dynamic bottom safe padding pada `WalletScreen` CustomScrollView.
+- [x] **Task 43**: Bungkus cascading update & delete pada `DatabaseService.deleteWallet` dalam transaksi database atomik (`db.transaction`).
+- [x] **Task 44**: Tambahkan proteksi rollover non-negatif pada `BudgetRolloverService.evaluate` agar surplus minus tidak mengurangi limit dasar bulanan.
+- [x] **Task 45**: Tambahkan dynamic bottom safe padding pada form `TransferScreen` untuk kenyamanan visual gesture bar.
+- [x] **Task 46**: Perbaiki validasi `isFullyPaid` di `DebtModel` agar mempertimbangkan status `isSettled` dan nominal non-nol.
+- [x] **Task 47**: Bungkus `DebtProvider.loadDebts` dalam `try-finally` agar status loading selalu ter-reset jika database gagal.
+- [x] **Task 48**: Tambahkan auto-settle otomatis pada `DebtProvider.addPayment` jika akumulasi pembayaran melunasi seluruh sisa hutang.
+- [x] **Task 49**: Tambahkan dynamic bottom safe padding pada CustomScrollView `BudgetScreen`.
+- [x] **Task 50**: Sinkronkan pembaruan state instan saat tombol clear search ditekan pada `HistoryScreen`.
+- [x] **Task 51**: Tambahkan dynamic bottom safe padding pada CustomScrollView `StatisticsScreen`.
+- [x] **Task 52**: Perluas karakter escape CSV pada `ExportService._escapeCsv` untuk mencakup carriage return `\r`.
+- [x] **Task 53**: Batasi clamp rasio progress bar (0.0 - 1.0) pada dokumen PDF di `PdfExportService`.
+- [x] **Task 54**: Tambahkan timeout guard pada seluruh request jaringan Google Drive di `GoogleDriveService`.
+- [x] **Task 55**: Bungkus rutin backup & restore pada `BackupScreen` dalam `try-finally` guna mencegah freezing UI.
+- [x] **Task 56**: Perbaiki validasi status `isReached` pada `SavingsGoalModel` dengan validasi target positif.
+- [x] **Task 57**: Bungkus `SavingsProvider.loadGoals` dalam `try-finally` dan auto-complete goal saat target tercapai di `addAmountToGoal`.
+- [x] **Task 58**: Tambahkan validasi non-negatif (`clamp(0.0, infinity)`) pada `SplitBillModel.remainingTotal` dan helper `isFullyPaid`.
+- [x] **Task 59**: Tambahkan semantic accessibility tooltips pada navigasi bulan `MonthSelector`.
+
+

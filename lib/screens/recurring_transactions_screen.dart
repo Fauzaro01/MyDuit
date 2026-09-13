@@ -8,6 +8,7 @@ import '../models/transaction_model.dart';
 import '../models/wallet_model.dart';
 import '../providers/recurring_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../providers/custom_category_provider.dart';
 import '../utils/formatters.dart';
 
 class RecurringTransactionsScreen extends StatefulWidget {
@@ -215,6 +216,7 @@ class _AddEditRecurringSheetState extends State<_AddEditRecurringSheet> {
 
   late TransactionType _type;
   late TransactionCategory _category;
+  String? _customCategoryId;
   late RecurrenceFrequency _frequency;
   late DateTime _startDate;
   DateTime? _endDate;
@@ -234,12 +236,14 @@ class _AddEditRecurringSheetState extends State<_AddEditRecurringSheet> {
       _noteController.text = r.note ?? '';
       _type = r.type;
       _category = r.category;
+      _customCategoryId = r.customCategoryId;
       _frequency = r.frequency;
       _startDate = r.startDate;
       _endDate = r.endDate;
     } else {
       _type = TransactionType.expense;
       _category = TransactionCategory.bills;
+      _customCategoryId = null;
       _frequency = RecurrenceFrequency.monthly;
       _startDate = DateTime.now();
     }
@@ -381,27 +385,69 @@ class _AddEditRecurringSheetState extends State<_AddEditRecurringSheet> {
             // Category
             Text('Kategori', style: theme.textTheme.titleSmall),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: categories.map((c) {
-                final selected = c == _category;
-                return ChoiceChip(
-                  avatar: Text(c.icon, style: const TextStyle(fontSize: 16)),
-                  label: Text(c.label),
-                  selected: selected,
-                  onSelected: (_) => setState(() => _category = c),
-                  selectedColor: isDark
-                      ? AppColors.primaryDark
-                      : AppColors.primaryLight,
-                  labelStyle: TextStyle(
-                    color: selected
-                        ? (isDark ? Colors.black : Colors.white)
-                        : null,
-                    fontWeight: selected ? FontWeight.w600 : null,
-                  ),
+            Builder(
+              builder: (context) {
+                final customCategoryProvider =
+                    Provider.of<CustomCategoryProvider?>(context);
+                final customCats = customCategoryProvider != null
+                    ? (_type == TransactionType.income
+                        ? customCategoryProvider.incomeCategories
+                        : customCategoryProvider.expenseCategories)
+                    : const [];
+
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ...categories.map((c) {
+                      final selected =
+                          c == _category && _customCategoryId == null;
+                      return ChoiceChip(
+                        avatar: Text(c.icon, style: const TextStyle(fontSize: 16)),
+                        label: Text(c.label),
+                        selected: selected,
+                        onSelected: (_) => setState(() {
+                          _category = c;
+                          _customCategoryId = null;
+                        }),
+                        selectedColor: isDark
+                            ? AppColors.primaryDark
+                            : AppColors.primaryLight,
+                        labelStyle: TextStyle(
+                          color: selected
+                              ? (isDark ? Colors.black : Colors.white)
+                              : null,
+                          fontWeight: selected ? FontWeight.w600 : null,
+                        ),
+                      );
+                    }),
+                    ...customCats.map((customCat) {
+                      final selected = _customCategoryId == customCat.id;
+                      return ChoiceChip(
+                        avatar: Text(
+                          customCat.emoji,
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        label: Text(customCat.name),
+                        selected: selected,
+                        onSelected: (_) => setState(() {
+                          _category = TransactionCategory.other;
+                          _customCategoryId = customCat.id;
+                        }),
+                        selectedColor: isDark
+                            ? AppColors.primaryDark
+                            : AppColors.primaryLight,
+                        labelStyle: TextStyle(
+                          color: selected
+                              ? (isDark ? Colors.black : Colors.white)
+                              : null,
+                          fontWeight: selected ? FontWeight.w600 : null,
+                        ),
+                      );
+                    }),
+                  ],
                 );
-              }).toList(),
+              },
             ),
             const SizedBox(height: 16),
 
@@ -581,6 +627,7 @@ class _AddEditRecurringSheetState extends State<_AddEditRecurringSheet> {
           ? null
           : _noteController.text.trim(),
       walletId: _selectedWallet?.id,
+      customCategoryId: _customCategoryId,
       isActive: widget.existing?.isActive ?? true,
       lastGeneratedDate: widget.existing?.lastGeneratedDate,
     );
@@ -616,6 +663,20 @@ class _RecurringTile extends StatelessWidget {
     final theme = Theme.of(context);
     final isExpense = recurring.type == TransactionType.expense;
     final color = isExpense ? AppColors.expense : AppColors.income;
+
+    final customCatProvider =
+        Provider.of<CustomCategoryProvider?>(context);
+    final customCat = (recurring.customCategoryId != null &&
+            customCatProvider != null)
+        ? customCatProvider.getCategoryById(recurring.customCategoryId!)
+        : null;
+
+    final emoji = customCat?.emoji ?? recurring.category.icon;
+    final categoryLabel = customCat?.name ?? recurring.category.label;
+
+    final nextDate = recurring.lastGeneratedDate != null
+        ? recurring.nextOccurrence(recurring.lastGeneratedDate!)
+        : recurring.startDate;
 
     return Dismissible(
       key: Key(recurring.id),
@@ -654,7 +715,7 @@ class _RecurringTile extends StatelessWidget {
                 ),
                 child: Center(
                   child: Text(
-                    recurring.category.icon,
+                    emoji,
                     style: const TextStyle(fontSize: 20),
                   ),
                 ),
@@ -675,9 +736,8 @@ class _RecurringTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${recurring.frequency.label} · '
-                      '${recurring.category.label}',
-                      style: theme.textTheme.bodySmall,
+                      '${recurring.frequency.label} · $categoryLabel · Berikutnya: ${DateFormatter.shortDate(nextDate)}',
+                      style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
                     ),
                   ],
                 ),
@@ -697,7 +757,7 @@ class _RecurringTile extends StatelessWidget {
                   Switch.adaptive(
                     value: recurring.isActive,
                     onChanged: (_) => onToggle(),
-                    activeColor: isDark
+                    activeTrackColor: isDark
                         ? AppColors.primaryDark
                         : AppColors.primaryLight,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,

@@ -6,6 +6,7 @@ class WalletModel {
   final String emoji;
   final int colorValue;
   final bool isDefault;
+  final String currencyCode;
   final DateTime createdAt;
 
   WalletModel({
@@ -14,6 +15,7 @@ class WalletModel {
     this.emoji = '💰',
     this.colorValue = 0xFF0D9373,
     this.isDefault = false,
+    this.currencyCode = 'IDR',
     DateTime? createdAt,
   }) : id = id ?? const Uuid().v4(),
        createdAt = createdAt ?? DateTime.now();
@@ -25,6 +27,7 @@ class WalletModel {
       'emoji': emoji,
       'colorValue': colorValue,
       'isDefault': isDefault ? 1 : 0,
+      'currencyCode': currencyCode,
       'createdAt': createdAt.millisecondsSinceEpoch,
     };
   }
@@ -36,6 +39,7 @@ class WalletModel {
       emoji: map['emoji'] as String? ?? '💰',
       colorValue: map['colorValue'] as int? ?? 0xFF0D9373,
       isDefault: (map['isDefault'] as int? ?? 0) == 1,
+      currencyCode: map['currencyCode'] as String? ?? 'IDR',
       createdAt: map['createdAt'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int)
           : DateTime.now(),
@@ -48,6 +52,7 @@ class WalletModel {
     String? emoji,
     int? colorValue,
     bool? isDefault,
+    String? currencyCode,
     DateTime? createdAt,
   }) {
     return WalletModel(
@@ -56,6 +61,7 @@ class WalletModel {
       emoji: emoji ?? this.emoji,
       colorValue: colorValue ?? this.colorValue,
       isDefault: isDefault ?? this.isDefault,
+      currencyCode: currencyCode ?? this.currencyCode,
       createdAt: createdAt ?? this.createdAt,
     );
   }

@@ -6,6 +6,9 @@ import '../models/transaction_model.dart';
 import '../models/wallet_model.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../providers/custom_category_provider.dart';
+import '../providers/tag_provider.dart';
+import '../services/receipt_parser_service.dart';
 import '../utils/formatters.dart';
 
 class AddTransactionScreen extends StatefulWidget {
@@ -27,12 +30,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _titleController = TextEditingController();
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
+  final _tagInputController = TextEditingController();
 
   late TransactionType _type;
   late TransactionCategory _category;
+  String? _customCategoryId;
   late DateTime _date;
   bool _isEditing = false;
   WalletModel? _selectedWallet;
+  List<String> _tags = [];
 
   @override
   void initState() {
@@ -47,7 +53,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _noteController.text = tx.note ?? '';
       _type = tx.type;
       _category = tx.category;
+      _customCategoryId = tx.customCategoryId;
       _date = tx.date;
+      _tags = List<String>.from(tx.tags);
     } else {
       _type = widget.initialIsIncome
           ? TransactionType.income
@@ -55,7 +63,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _category = widget.initialIsIncome
           ? TransactionCategory.salary
           : TransactionCategory.food;
+      _customCategoryId = null;
       _date = DateTime.now();
+      _tags = [];
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -80,6 +90,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     _titleController.dispose();
     _amountController.dispose();
     _noteController.dispose();
+    _tagInputController.dispose();
     super.dispose();
   }
 
@@ -107,11 +118,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           icon: const Icon(Icons.close_rounded),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.document_scanner_rounded),
+            tooltip: 'Scan / Tempel Teks Struk',
+            onPressed: () => _showReceiptScanSheet(context, isDark),
+          ),
+        ],
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            MediaQuery.paddingOf(context).bottom + 24,
+          ),
           children: [
             // Type toggle
             Container(
@@ -132,6 +155,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         setState(() {
                           _type = TransactionType.income;
                           _category = TransactionCategory.salary;
+                          _customCategoryId = null;
                         });
                       },
                     ),
@@ -146,6 +170,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         setState(() {
                           _type = TransactionType.expense;
                           _category = TransactionCategory.food;
+                          _customCategoryId = null;
                         });
                       },
                     ),
@@ -211,56 +236,124 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             // Category
             Text('Kategori', style: theme.textTheme.labelLarge),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _availableCategories.map((cat) {
-                final selected = cat == _category;
+            Builder(
+              builder: (context) {
+                final customCategoryProvider =
+                    Provider.of<CustomCategoryProvider?>(context);
+                final customCats = customCategoryProvider != null
+                    ? (isIncome
+                        ? customCategoryProvider.incomeCategories
+                        : customCategoryProvider.expenseCategories)
+                    : const [];
                 final accentColor = isIncome
                     ? AppColors.income
                     : AppColors.expense;
 
-                return GestureDetector(
-                  onTap: () => setState(() => _category = cat),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? accentColor.withValues(alpha: 0.15)
-                          : (isDark
-                                ? AppColors.cardDark
-                                : AppColors.cardAltLight),
-                      borderRadius: BorderRadius.circular(12),
-                      border: selected
-                          ? Border.all(color: accentColor, width: 1.5)
-                          : null,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(cat.icon, style: const TextStyle(fontSize: 18)),
-                        const SizedBox(width: 6),
-                        Text(
-                          cat.label,
-                          style: TextStyle(
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ..._availableCategories.map((cat) {
+                      final selected =
+                          cat == _category && _customCategoryId == null;
+
+                      return GestureDetector(
+                        onTap: () => setState(() {
+                          _category = cat;
+                          _customCategoryId = null;
+                        }),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
                             color: selected
-                                ? accentColor
-                                : theme.textTheme.bodyMedium?.color,
-                            fontWeight: selected
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                            fontSize: 13,
+                                ? accentColor.withValues(alpha: 0.15)
+                                : (isDark
+                                      ? AppColors.cardDark
+                                      : AppColors.cardAltLight),
+                            borderRadius: BorderRadius.circular(12),
+                            border: selected
+                                ? Border.all(color: accentColor, width: 1.5)
+                                : null,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(cat.icon, style: const TextStyle(fontSize: 18)),
+                              const SizedBox(width: 6),
+                              Text(
+                                cat.label,
+                                style: TextStyle(
+                                  color: selected
+                                      ? accentColor
+                                      : theme.textTheme.bodyMedium?.color,
+                                  fontWeight: selected
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
+                      );
+                    }),
+                    ...customCats.map((customCat) {
+                      final selected = _customCategoryId == customCat.id;
+
+                      return GestureDetector(
+                        onTap: () => setState(() {
+                          _category = TransactionCategory.other;
+                          _customCategoryId = customCat.id;
+                        }),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? accentColor.withValues(alpha: 0.15)
+                                : (isDark
+                                      ? AppColors.cardDark
+                                      : AppColors.cardAltLight),
+                            borderRadius: BorderRadius.circular(12),
+                            border: selected
+                                ? Border.all(color: accentColor, width: 1.5)
+                                : null,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                customCat.emoji,
+                                style: const TextStyle(fontSize: 18),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                customCat.name,
+                                style: TextStyle(
+                                  color: selected
+                                      ? accentColor
+                                      : theme.textTheme.bodyMedium?.color,
+                                  fontWeight: selected
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
                 );
-              }).toList(),
+              },
             ),
             const SizedBox(height: 20),
 
@@ -303,6 +396,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 20),
+
+            // Tag / Project label
+            Text('Tag & Label (#Proyek/Tag)', style: theme.textTheme.labelLarge),
+            const SizedBox(height: 8),
+            _buildTagSection(context, isDark),
             const SizedBox(height: 20),
 
             // Note
@@ -463,6 +562,191 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
   }
 
+  void _showReceiptScanSheet(BuildContext context, bool isDark) {
+    final textController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.document_scanner_rounded,
+                  color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Smart Receipt Parser',
+                  style: Theme.of(ctx).textTheme.titleLarge,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tempel atau ketik teks dari struk belanja (Indomaret, Alfamart, Starbucks, SPBU, dll). Sistem akan mengekstrak merchant, nominal, tanggal, dan kategori secara instan.',
+              style: Theme.of(ctx).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: textController,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                hintText: 'Contoh:\nINDOMARET KEMANG\n12/09/2026\nSusu UHT 20.000\nTotal Rp 45.000',
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Batal'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
+                  label: const Text('Ekstrak & Terapkan'),
+                  onPressed: () {
+                    final raw = textController.text;
+                    if (raw.trim().isEmpty) return;
+
+                    final parsed = ReceiptParserService.parse(raw);
+                    setState(() {
+                      if (parsed.merchantName != null &&
+                          parsed.merchantName!.isNotEmpty) {
+                        _titleController.text = parsed.merchantName!;
+                      }
+                      if (parsed.totalAmount != null &&
+                          parsed.totalAmount! > 0) {
+                        _amountController.text = CurrencyInputService.isFormatted
+                            ? RupiahInputFormatter.formatNumber(
+                                parsed.totalAmount!,
+                              )
+                            : parsed.totalAmount!.toStringAsFixed(0);
+                      }
+                      if (parsed.date != null) {
+                        _date = parsed.date!;
+                      }
+                      _type = parsed.suggestedType;
+                      _category = parsed.suggestedCategory;
+                      if (parsed.lineItems.isNotEmpty) {
+                        _noteController.text = parsed.lineItems.join('\n');
+                      }
+                    });
+
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Struk berhasil diproses: ${parsed.merchantName ?? "Transaksi"} (${CurrencyFormatter.format(parsed.totalAmount ?? 0)})',
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTagSection(BuildContext context, bool isDark) {
+    final tagProvider = Provider.of<TagProvider?>(context);
+    final popularTags = tagProvider?.tags.map((t) => t.name).toList() ?? [];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Selected tags chips
+        if (_tags.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _tags.map((tag) {
+              return Chip(
+                label: Text('#$tag', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                deleteIcon: const Icon(Icons.close_rounded, size: 16),
+                onDeleted: () => setState(() => _tags.remove(tag)),
+                backgroundColor: (isDark ? AppColors.primaryDark : AppColors.primaryLight)
+                    .withValues(alpha: 0.2),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              );
+            }).toList(),
+          ),
+        if (_tags.isNotEmpty) const SizedBox(height: 8),
+
+        // Tag text input + add button
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _tagInputController,
+                decoration: const InputDecoration(
+                  hintText: 'Tambah tag (contoh: Liburan, ProyekA)',
+                  prefixText: '#',
+                  isDense: true,
+                ),
+                onSubmitted: (val) => _addTag(val),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filledTonal(
+              icon: const Icon(Icons.add_rounded),
+              onPressed: () => _addTag(_tagInputController.text),
+            ),
+          ],
+        ),
+
+        // Popular tag suggestions
+        if (popularTags.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            children: popularTags.where((t) => !_tags.contains(t)).map((tag) {
+              return ActionChip(
+                label: Text('#$tag', style: const TextStyle(fontSize: 11)),
+                onPressed: () => _addTag(tag),
+                padding: EdgeInsets.zero,
+              );
+            }).toList(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  void _addTag(String tag) {
+    final clean = tag.replaceAll('#', '').trim();
+    if (clean.isNotEmpty && !_tags.contains(clean)) {
+      setState(() {
+        _tags.add(clean);
+        _tagInputController.clear();
+      });
+      context.read<TagProvider?>()?.addTag(clean);
+    }
+  }
+
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
 
@@ -478,6 +762,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ? null
           : _noteController.text.trim(),
       walletId: _selectedWallet?.id,
+      customCategoryId: _customCategoryId,
+      tags: _tags,
     );
 
     if (_isEditing) {

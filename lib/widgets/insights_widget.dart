@@ -32,7 +32,7 @@ class InsightsCard extends StatelessWidget {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: insights.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            separatorBuilder: (_, _) => const SizedBox(width: 12),
             itemBuilder: (context, index) {
               final insight = insights[index];
               return _InsightChip(
@@ -86,14 +86,16 @@ class InsightsCard extends StatelessWidget {
       final topEntry = provider.expenseCategoryTotals.entries.reduce(
         (a, b) => a.value > b.value ? a : b,
       );
-      insights.add(
-        _InsightData(
-          icon: Icons.trending_up_rounded,
-          title: 'Pengeluaran Terbesar',
-          value: '${topEntry.key.icon} ${topEntry.key.label}',
-          color: AppColors.expense,
-        ),
-      );
+      if (topEntry.value > 0) {
+        insights.add(
+          _InsightData(
+            icon: Icons.trending_up_rounded,
+            title: 'Pengeluaran Terbesar',
+            value: '${topEntry.key.icon} ${topEntry.key.label}',
+            color: AppColors.expense,
+          ),
+        );
+      }
     }
 
     // 3. Average daily spending

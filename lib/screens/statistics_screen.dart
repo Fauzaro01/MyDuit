@@ -4,9 +4,31 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../models/transaction_model.dart';
+import '../providers/custom_category_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../utils/formatters.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/transaction_detail_sheet.dart';
+
+class _CategoryStatItem {
+  final String label;
+  final String icon;
+  final double amount;
+  final Color color;
+  final int count;
+  final TransactionCategory? category;
+  final String? customCategoryId;
+
+  const _CategoryStatItem({
+    required this.label,
+    required this.icon,
+    required this.amount,
+    required this.color,
+    required this.count,
+    this.category,
+    this.customCategoryId,
+  });
+}
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
@@ -18,17 +40,176 @@ class StatisticsScreen extends StatefulWidget {
 class _StatisticsScreenState extends State<StatisticsScreen> {
   bool _showExpense = true;
 
+  void _showCategoryTransactionsSheet(BuildContext context, _CategoryStatItem item) {
+    final provider = context.read<TransactionProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final transactions = (item.category != null
+            ? provider.transactions.where((t) => t.category == item.category && t.customCategoryId == null)
+            : provider.transactions.where((t) => t.customCategoryId == item.customCategoryId))
+        .where((t) =>
+            _showExpense
+                ? t.type == TransactionType.expense
+                : t.type == TransactionType.income)
+        .toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(ctx).size.height * 0.75,
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: item.color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(item.icon, style: const TextStyle(fontSize: 22)),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.label,
+                        style: Theme.of(ctx).textTheme.titleLarge,
+                      ),
+                      Text(
+                        '${transactions.length} transaksi · ${CurrencyFormatter.format(item.amount)}',
+                        style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                              fontSize: 12,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            Expanded(
+              child: transactions.isEmpty
+                  ? const EmptyState(message: 'Tidak ada transaksi')
+                  : ListView.separated(
+                      padding: const EdgeInsets.only(top: 8, bottom: 16),
+                      itemCount: transactions.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (ctx, i) {
+                        final tx = transactions[i];
+                        return TransactionTile(
+                          transaction: tx,
+                          onDismissed: () => provider.deleteTransaction(tx.id),
+                          onTap: () => showTransactionDetail(
+                            context,
+                            tx,
+                            onDeleted: () => provider.deleteTransaction(tx.id),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TransactionProvider>();
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final customCatProvider = Provider.of<CustomCategoryProvider?>(context);
 
     final categoryTotals = _showExpense
         ? provider.expenseCategoryTotals
         : provider.incomeCategoryTotals;
 
-    final totalAmount = categoryTotals.values.fold(0.0, (a, b) => a + b);
+    final customTotals = _showExpense
+        ? provider.expenseCustomTotals
+        : provider.incomeCustomTotals;
+
+    final targetTransactions = _showExpense
+        ? provider.expenseTransactions
+        : provider.incomeTransactions;
+
+    // Merge standard and custom categories into unified list
+    final List<_CategoryStatItem> items = [];
+    int colorIdx = 0;
+
+    for (final entry in categoryTotals.entries) {
+      if (entry.value > 0) {
+        final count = targetTransactions
+            .where((t) => t.category == entry.key && t.customCategoryId == null)
+            .length;
+        items.add(_CategoryStatItem(
+          label: entry.key.label,
+          icon: entry.key.icon,
+          amount: entry.value,
+          color: CategoryColors.getColor(entry.key.index, context),
+          count: count,
+          category: entry.key,
+        ));
+      }
+    }
+
+    for (final entry in customTotals.entries) {
+      if (entry.value > 0) {
+        final customCat = customCatProvider?.getCategoryById(entry.key);
+        final label = customCat?.name ?? 'Kategori Kustom';
+        final icon = customCat?.emoji ?? '🏷️';
+        final color = customCat != null
+            ? Color(customCat.colorValue)
+            : CategoryColors.getColor(colorIdx + 8, context);
+        final count = targetTransactions
+            .where((t) => t.customCategoryId == entry.key)
+            .length;
+        items.add(_CategoryStatItem(
+          label: label,
+          icon: icon,
+          amount: entry.value,
+          color: color,
+          count: count,
+          customCategoryId: entry.key,
+        ));
+        colorIdx++;
+      }
+    }
+
+    // Sort by amount descending
+    items.sort((a, b) => b.amount.compareTo(a.amount));
+
+    final totalAmount = items.fold(0.0, (sum, item) => sum + item.amount);
 
     return SafeArea(
       child: CustomScrollView(
@@ -109,7 +290,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   const SizedBox(height: 24),
 
                   // Pie Chart
-                  if (categoryTotals.isNotEmpty) ...[
+                  if (items.isNotEmpty) ...[
                     Text(
                       'Berdasarkan Kategori',
                       style: theme.textTheme.titleLarge,
@@ -121,11 +302,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                             PieChartData(
                               sectionsSpace: 3,
                               centerSpaceRadius: 50,
-                              sections: _buildPieSections(
-                                categoryTotals,
-                                totalAmount,
-                                context,
-                              ),
+                              sections: _buildPieSections(items, totalAmount),
                             ),
                           ),
                         )
@@ -138,26 +315,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     const SizedBox(height: 20),
 
                     // Category list
-                    ...categoryTotals.entries.toList().asMap().entries.map((
-                      mapEntry,
-                    ) {
+                    ...items.asMap().entries.map((mapEntry) {
                       final index = mapEntry.key;
-                      final entry = mapEntry.value;
+                      final item = mapEntry.value;
                       final percentage = totalAmount > 0
-                          ? (entry.value / totalAmount * 100)
+                          ? (item.amount / totalAmount * 100)
                           : 0.0;
 
                       return Padding(
                             padding: const EdgeInsets.only(bottom: 10),
                             child: _CategoryRow(
-                              category: entry.key,
-                              amount: entry.value,
+                              item: item,
                               percentage: percentage,
-                              color: CategoryColors.getColor(
-                                entry.key.index,
-                                context,
-                              ),
                               isDark: isDark,
+                              onTap: () => _showCategoryTransactionsSheet(context, item),
                             ),
                           )
                           .animate()
@@ -177,7 +348,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   const SizedBox(height: 24),
 
                   // Line chart section
-                  if (categoryTotals.isNotEmpty) ...[
+                  if (items.isNotEmpty) ...[
                     Text('Tren Harian', style: theme.textTheme.titleLarge),
                     const SizedBox(height: 16),
                     _DailyTrendChart(showExpense: _showExpense, isDark: isDark),
@@ -210,7 +381,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     const SizedBox(height: 16),
                     _WeeklySummary(showExpense: _showExpense, isDark: isDark),
                   ],
-                  const SizedBox(height: 100),
+                  SizedBox(
+                    height: 100 + MediaQuery.paddingOf(context).bottom,
+                  ),
                 ],
               ),
             ),
@@ -221,17 +394,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   List<PieChartSectionData> _buildPieSections(
-    Map<TransactionCategory, double> data,
+    List<_CategoryStatItem> items,
     double total,
-    BuildContext context,
   ) {
-    return data.entries.map((entry) {
-      final percentage = total > 0 ? (entry.value / total * 100) : 0.0;
-      final color = CategoryColors.getColor(entry.key.index, context);
+    return items.map((item) {
+      final percentage = total > 0 ? (item.amount / total * 100) : 0.0;
 
       return PieChartSectionData(
-        color: color,
-        value: entry.value,
+        color: item.color,
+        value: item.amount,
         title: '${percentage.toStringAsFixed(0)}%',
         titleStyle: const TextStyle(
           fontSize: 12,
@@ -245,88 +416,110 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 }
 
 class _CategoryRow extends StatelessWidget {
-  final TransactionCategory category;
-  final double amount;
+  final _CategoryStatItem item;
   final double percentage;
-  final Color color;
   final bool isDark;
+  final VoidCallback? onTap;
 
   const _CategoryRow({
-    required this.category,
-    required this.amount,
+    required this.item,
     required this.percentage,
-    required this.color,
     required this.isDark,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.cardDark : AppColors.cardLight,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            alignment: Alignment.center,
-            child: Text(category.icon, style: const TextStyle(fontSize: 20)),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.cardDark : AppColors.cardLight,
+            borderRadius: BorderRadius.circular(14),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  category.label,
-                  style: theme.textTheme.titleMedium?.copyWith(fontSize: 14),
-                ),
-                const SizedBox(height: 6),
-                // Progress bar
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: percentage / 100,
-                    backgroundColor: color.withValues(alpha: 0.1),
-                    valueColor: AlwaysStoppedAnimation(color),
-                    minHeight: 5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          child: Row(
             children: [
-              Text(
-                CurrencyFormatter.formatCompact(amount),
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  color: theme.textTheme.titleMedium?.color,
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: item.color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                child: Text(item.icon, style: const TextStyle(fontSize: 20)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            item.label,
+                            style: theme.textTheme.titleMedium?.copyWith(fontSize: 14),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '(${item.count})',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    // Progress bar
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: percentage / 100,
+                        backgroundColor: item.color.withValues(alpha: 0.1),
+                        valueColor: AlwaysStoppedAnimation(item.color),
+                        minHeight: 5,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Text(
-                '${percentage.toStringAsFixed(1)}%',
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    CurrencyFormatter.formatCompact(item.amount),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: theme.textTheme.titleMedium?.color,
+                    ),
+                  ),
+                  Text(
+                    '${percentage.toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      color: item.color,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -371,10 +564,19 @@ class _DailyTrendChartState extends State<_DailyTrendChart> {
     double maxVal = 0;
 
     for (final row in dailyData) {
-      final date = DateTime.fromMillisecondsSinceEpoch(row['date'] as int);
+      final day = (row['day'] as num?)?.toDouble() ??
+          DateTime.fromMillisecondsSinceEpoch(row['date'] as int).day.toDouble();
       final total = (row['total'] as num).toDouble();
-      spots.add(FlSpot(date.day.toDouble(), total));
-      if (total > maxVal) maxVal = total;
+
+      if (spots.isNotEmpty && spots.last.x == day) {
+        final lastSpot = spots.removeLast();
+        final combined = lastSpot.y + total;
+        spots.add(FlSpot(day, combined));
+        if (combined > maxVal) maxVal = combined;
+      } else {
+        spots.add(FlSpot(day, total));
+        if (total > maxVal) maxVal = total;
+      }
     }
 
     if (mounted) {
@@ -750,7 +952,7 @@ class _MonthlyComparisonChartState extends State<_MonthlyComparisonChart> {
           }).toList(),
         ),
       ),
-    ).animate().fadeIn(delay: 500.ms, duration: 500.ms);
+    );
   }
 }
 
@@ -777,6 +979,7 @@ class _WeeklySummary extends StatefulWidget {
 
 class _WeeklySummaryState extends State<_WeeklySummary> {
   List<double> _weeklyTotals = [0, 0, 0, 0, 0];
+  int _weekCount = 5;
 
   @override
   void didChangeDependencies() {
@@ -792,24 +995,32 @@ class _WeeklySummaryState extends State<_WeeklySummary> {
 
   void _calculate() {
     final provider = context.read<TransactionProvider>();
+    final daysInMonth = DateTime(provider.selectedYear, provider.selectedMonth + 1, 0).day;
+    final weekCount = (daysInMonth / 7).ceil();
+
     final transactions = widget.showExpense
         ? provider.expenseTransactions
         : provider.incomeTransactions;
 
-    final weekTotals = List<double>.filled(5, 0);
+    final weekTotals = List<double>.filled(weekCount, 0);
     for (final tx in transactions) {
-      final weekIndex = ((tx.date.day - 1) / 7).floor().clamp(0, 4);
+      final weekIndex = ((tx.date.day - 1) / 7).floor().clamp(0, weekCount - 1);
       weekTotals[weekIndex] += tx.amount;
     }
 
-    setState(() => _weeklyTotals = weekTotals);
+    setState(() {
+      _weekCount = weekCount;
+      _weeklyTotals = weekTotals;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = widget.showExpense ? AppColors.expense : AppColors.income;
-    final maxWeek = _weeklyTotals.reduce((a, b) => a > b ? a : b);
+    final maxWeek = _weeklyTotals.isEmpty
+        ? 0.0
+        : _weeklyTotals.reduce((a, b) => a > b ? a : b);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -818,7 +1029,7 @@ class _WeeklySummaryState extends State<_WeeklySummary> {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
-        children: List.generate(5, (i) {
+        children: List.generate(_weekCount, (i) {
           final pct = maxWeek > 0 ? _weeklyTotals[i] / maxWeek : 0.0;
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
