@@ -188,23 +188,60 @@ class _BackupScreenState extends State<BackupScreen> {
   }
 
   Future<void> _restore() async {
+    setState(() => _isLoading = true);
+    List<DriveBackupInfo> snapshots = [];
+    try {
+      snapshots = await GoogleDriveService.getBackupList();
+    } catch (_) {}
+    if (mounted) setState(() => _isLoading = false);
+
+    if (!mounted) return;
+
+    if (snapshots.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tidak ada berkas backup yang ditemukan di Google Drive.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    String? selectedFileId;
+    if (snapshots.length > 1) {
+      final picked = await showModalBottomSheet<DriveBackupInfo>(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (ctx) => _SnapshotSelectionSheet(snapshots: snapshots),
+      );
+      if (picked == null) return;
+      selectedFileId = picked.fileId;
+    } else {
+      selectedFileId = snapshots.first.fileId;
+    }
+
+    if (!mounted) return;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Restore Data?'),
         content: const Text(
-          'Data saat ini akan digantikan dengan data dari backup. '
-          'Pastikan kamu sudah backup data terbaru.\n\n'
-          'Aplikasi perlu di-restart setelah restore.',
+          'Data saat ini akan digantikan dengan data dari backup.\n\n'
+          'Perlindungan Integritas Aktif: Snapshot keamanan dibuat otomatis sebelum pemulihan, dan akan di-rollback bila data korup.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Batal'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Restore'),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.expense),
+            child: const Text('Pulihkan Sekarang'),
           ),
         ],
       ),
@@ -217,7 +254,7 @@ class _BackupScreenState extends State<BackupScreen> {
       _statusMessage = null;
     });
     try {
-      final result = await GoogleDriveService.restore();
+      final result = await GoogleDriveService.restore(fileId: selectedFileId);
       if (result.success && mounted) {
         await Future.wait([
           context.read<TransactionProvider>().loadData(),
@@ -638,7 +675,7 @@ class _BackupScreenState extends State<BackupScreen> {
             // Offline Local Backup Section
             const SizedBox(height: 28),
             Text(
-              'CADANGAN LOKAL (OFFLINE / ENCRYPTED JSON)',
+              'CADANGAN LOKAL & EKSPOR DATA',
               style: theme.textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w600,
                 fontSize: 12,
@@ -649,8 +686,8 @@ class _BackupScreenState extends State<BackupScreen> {
             _ActionCard(
               isDark: isDark,
               icon: Icons.file_upload_outlined,
-              title: 'Ekspor Cadangan Terenkripsi',
-              subtitle: 'Simpan file JSON dengan proteksi password',
+              title: 'Ekspor Cadangan Terkompresi',
+              subtitle: 'Simpan file JSON (GZip) dengan proteksi password',
               color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
               isLoading: _isLoading,
               onTap: _isLoading ? null : () => _exportOfflineBackup(context),
@@ -661,9 +698,22 @@ class _BackupScreenState extends State<BackupScreen> {
             const SizedBox(height: 12),
             _ActionCard(
               isDark: isDark,
+              icon: Icons.storage_rounded,
+              title: 'Ekspor Basis Data SQLite (.db)',
+              subtitle: 'Salin file database biner langsung untuk backup mandiri',
+              color: Colors.teal,
+              isLoading: _isLoading,
+              onTap: _isLoading ? null : () => _exportSqliteBackup(context),
+            )
+                .animate()
+                .fadeIn(delay: 230.ms, duration: 400.ms)
+                .slideY(begin: 0.05, end: 0),
+            const SizedBox(height: 12),
+            _ActionCard(
+              isDark: isDark,
               icon: Icons.file_download_outlined,
               title: 'Impor Cadangan Offline',
-              subtitle: 'Pulihkan data dari file JSON',
+              subtitle: 'Pulihkan data dari JSON dengan pratinjau data',
               color: Colors.orange,
               isLoading: _isLoading,
               onTap: _isLoading ? null : () => _importOfflineBackup(context),
@@ -713,12 +763,14 @@ class _BackupScreenState extends State<BackupScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Ekspor Cadangan Offline'),
+        title: const Text('Ekspor Cadangan Terkompresi'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Masukkan password enkripsi opsional untuk mengamankan file:'),
+            const Text(
+              'File cadangan akan dikompresi (GZip) untuk menghemat memori. Masukkan password enkripsi opsional:',
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: passwordController,
@@ -751,6 +803,7 @@ class _BackupScreenState extends State<BackupScreen> {
       try {
         await LocalBackupService.exportAndShare(
           password: passwordController.text.trim().isEmpty ? null : passwordController.text.trim(),
+          compress: true,
         );
       } catch (e) {
         scaffoldMessenger.showSnackBar(
@@ -759,6 +812,20 @@ class _BackupScreenState extends State<BackupScreen> {
       } finally {
         if (mounted) setState(() => _isLoading = false);
       }
+    }
+  }
+
+  Future<void> _exportSqliteBackup(BuildContext context) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    setState(() => _isLoading = true);
+    try {
+      await LocalBackupService.exportDatabaseFile();
+    } catch (e) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text('Gagal ekspor basis data: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -778,7 +845,7 @@ class _BackupScreenState extends State<BackupScreen> {
     final aP = context.read<AssetProvider>();
     final tplP = context.read<TemplateProvider>();
 
-    final confirmed = await showDialog<bool>(
+    final inputConfirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -817,33 +884,63 @@ class _BackupScreenState extends State<BackupScreen> {
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.expense,
+              backgroundColor: Colors.orange,
             ),
-            child: const Text('Pulihkan Data'),
+            child: const Text('Periksa Cadangan'),
           ),
         ],
       ),
     );
 
-    if (confirmed == true && jsonController.text.trim().isNotEmpty) {
+    if (inputConfirmed == true && jsonController.text.trim().isNotEmpty) {
+      final rawText = jsonController.text.trim();
+      final pwd = passwordController.text.trim().isEmpty ? null : passwordController.text.trim();
+
+      setState(() => _isLoading = true);
+      BackupPreviewInfo? preview;
+      try {
+        preview = await LocalBackupService.previewFromJsonString(rawText, password: pwd);
+      } catch (e) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('Gagal membaca berkas: $e')),
+        );
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+
+      if (preview == null) return;
+      if (!context.mounted) return;
+
+      // Show preview sheet before confirming overwrite
+      final proceed = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (ctx) => _PreviewDataSheet(preview: preview!),
+      );
+
+      if (proceed != true) return;
+      if (!context.mounted) return;
+
       setState(() => _isLoading = true);
       try {
-        final success = await LocalBackupService.importFromJsonString(
-          jsonController.text.trim(),
-          password: passwordController.text.trim().isEmpty ? null : passwordController.text.trim(),
-        );
+        final success = await LocalBackupService.importFromJsonString(rawText, password: pwd);
         if (success) {
-          await txP.loadData();
-          await wP.loadWallets();
-          await rP.loadRecurringTransactions();
-          await sP.loadGoals();
-          await dP.loadDebts();
-          await cP.loadCategories();
-          await sbP.loadBills();
-          await tP.loadTags();
-          await subP.loadSubscriptions();
-          await aP.loadAssets();
-          await tplP.loadTemplates();
+          await Future.wait([
+            txP.loadData(),
+            wP.loadWallets(),
+            rP.loadRecurringTransactions(),
+            sP.loadGoals(),
+            dP.loadDebts(),
+            cP.loadCategories(),
+            sbP.loadBills(),
+            tP.loadTags(),
+            subP.loadSubscriptions(),
+            aP.loadAssets(),
+            tplP.loadTemplates(),
+          ]);
 
           scaffoldMessenger.showSnackBar(
             const SnackBar(
@@ -860,6 +957,221 @@ class _BackupScreenState extends State<BackupScreen> {
         if (mounted) setState(() => _isLoading = false);
       }
     }
+  }
+}
+
+class _SnapshotSelectionSheet extends StatelessWidget {
+  final List<DriveBackupInfo> snapshots;
+
+  const _SnapshotSelectionSheet({required this.snapshots});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.paddingOf(context).bottom + 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Icon(Icons.history_rounded, color: Colors.blue),
+              const SizedBox(width: 8),
+              Text(
+                'Pilih Versi Cadangan Drive',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Pilih salah satu snapshot cadangan Google Drive untuk dipulihkan.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 16),
+          Flexible(
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: snapshots.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
+              itemBuilder: (ctx, index) {
+                final s = snapshots[index];
+                final dateFormatted = '${s.modifiedTime.day}/${s.modifiedTime.month}/${s.modifiedTime.year} ${s.modifiedTime.hour.toString().padLeft(2, '0')}:${s.modifiedTime.minute.toString().padLeft(2, '0')}';
+                return Material(
+                  color: isDark ? AppColors.cardDark : AppColors.cardLight,
+                  borderRadius: BorderRadius.circular(14),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    leading: CircleAvatar(
+                      backgroundColor: index == 0
+                          ? AppColors.income.withValues(alpha: 0.15)
+                          : Colors.grey.withValues(alpha: 0.15),
+                      child: Icon(
+                        index == 0 ? Icons.star_rounded : Icons.backup_rounded,
+                        color: index == 0 ? AppColors.income : Colors.grey,
+                        size: 20,
+                      ),
+                    ),
+                    title: Row(
+                      children: [
+                        Text(
+                          dateFormatted,
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                        if (index == 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.income.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'Terbaru',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.income,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    subtitle: Text(
+                      'Ukuran: ${s.formattedSize} • ${s.fileName}',
+                      style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
+                    ),
+                    trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+                    onTap: () => Navigator.pop(ctx, s),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewDataSheet extends StatelessWidget {
+  final BackupPreviewInfo preview;
+
+  const _PreviewDataSheet({required this.preview});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.paddingOf(context).bottom + 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Icon(Icons.preview_rounded, color: Colors.orange),
+              const SizedBox(width: 8),
+              Text(
+                'Pratinjau Berkas Cadangan',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Periksa ringkasan data sebelum menimpa database lokal saat ini:',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.cardDark : AppColors.cardLight,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              children: [
+                _previewRow(context, 'Total Transaksi', '${preview.transactionCount} data', Icons.receipt_long_rounded),
+                const Divider(height: 16),
+                _previewRow(context, 'Jumlah Dompet', '${preview.walletCount} dompet', Icons.account_balance_wallet_rounded),
+                const Divider(height: 16),
+                _previewRow(context, 'Target Tabungan', '${preview.savingsGoalCount} target', Icons.savings_rounded),
+                const Divider(height: 16),
+                _previewRow(context, 'Catatan Utang/Piutang', '${preview.debtCount} data', Icons.handshake_rounded),
+                const Divider(height: 16),
+                _previewRow(context, 'Anggaran Bulanan', '${preview.budgetCount} kategori', Icons.pie_chart_rounded),
+                const Divider(height: 16),
+                _previewRow(context, 'Kompresi & Proteksi', '${preview.isCompressed ? "GZip" : "Plain"} • ${preview.isEncrypted ? "Terenkripsi" : "Publik"}', Icons.security_rounded),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Batal'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: FilledButton.styleFrom(backgroundColor: AppColors.expense),
+                  child: const Text('Lanjutkan Restore'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewRow(BuildContext context, String label, String value, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.grey),
+        const SizedBox(width: 8),
+        Text(label, style: const TextStyle(fontSize: 12)),
+        const Spacer(),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+      ],
+    );
   }
 }
 

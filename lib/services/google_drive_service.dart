@@ -277,6 +277,23 @@ class GoogleDriveService {
     }
   }
 
+  /// Parse HTTP response status code into user-friendly error messages
+  static String _parseHttpError(http.Response resp, {String? defaultMsg}) {
+    final code = resp.statusCode;
+    if (code == 401) {
+      return 'Sesi Google Drive kedaluwarsa. Silakan masuk ulang.';
+    } else if (code == 403) {
+      return 'Penyimpanan Google Drive penuh atau izin akses ditolak.';
+    } else if (code == 404) {
+      return 'Berkas cadangan tidak ditemukan di Google Drive.';
+    } else if (code == 429) {
+      return 'Terlalu banyak permintaan ke Google Drive. Coba sesaat lagi.';
+    } else if (code >= 500) {
+      return 'Layanan Google Drive sedang mengalami gangguan sementara.';
+    }
+    return defaultMsg ?? 'Gagal menghubungi Google Drive ($code).';
+  }
+
   /// Find or create the MyDuit backup folder
   static Future<String?> _getOrCreateFolder(Map<String, String> headers) async {
     try {
@@ -296,7 +313,7 @@ class GoogleDriveService {
           return files.first['id'] as String;
         }
       } else {
-        _lastError = 'Gagal mengakses Google Drive (${searchResp.statusCode})';
+        _lastError = _parseHttpError(searchResp);
         return null;
       }
 
@@ -315,7 +332,10 @@ class GoogleDriveService {
       if (createResp.statusCode == 200) {
         return jsonDecode(createResp.body)['id'] as String;
       }
-      _lastError = 'Gagal membuat folder di Google Drive (${createResp.statusCode})';
+      _lastError = _parseHttpError(
+        createResp,
+        defaultMsg: 'Gagal membuat folder di Google Drive (${createResp.statusCode})',
+      );
       return null;
     } catch (e) {
       _lastError = 'Koneksi ke Google Drive gagal: $e';
@@ -323,8 +343,8 @@ class GoogleDriveService {
     }
   }
 
-  /// Backup database to Google Drive
-  static Future<BackupResult> backup() async {
+  /// Backup database to Google Drive (with optional snapshot versioning)
+  static Future<BackupResult> backup({bool createSnapshot = false}) async {
     try {
       final headers = await _getAuthHeaders();
       if (headers == null) {
@@ -350,13 +370,17 @@ class GoogleDriveService {
       if (folderId == null) {
         return BackupResult(
           success: false,
-          message: 'Gagal membuat folder di Drive',
+          message: _lastError ?? 'Gagal membuat folder di Drive',
         );
       }
 
-      final existingId = await _findExistingBackup(headers, folderId);
-      final dbBytes = await dbFile.readAsBytes();
       final now = DateTime.now();
+      final targetFileName = createSnapshot
+          ? 'myduit_backup_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.db'
+          : _backupFileName;
+
+      final existingId = createSnapshot ? null : await _findExistingBackup(headers, folderId);
+      final dbBytes = await dbFile.readAsBytes();
 
       if (existingId != null) {
         final updateUrl = Uri.parse(
@@ -373,14 +397,14 @@ class GoogleDriveService {
         if (resp.statusCode != 200) {
           return BackupResult(
             success: false,
-            message: 'Gagal memperbarui backup: ${resp.statusCode}',
+            message: _parseHttpError(resp, defaultMsg: 'Gagal memperbarui backup: ${resp.statusCode}'),
           );
         }
       } else {
         final metadata = jsonEncode({
-          'name': _backupFileName,
+          'name': targetFileName,
           'parents': [folderId],
-          'description': 'MyDuit backup ${now.toIso8601String()}',
+          'description': 'MyDuit backup ${_formatTime(now)}',
         });
 
         final boundary = 'myduit_boundary_${now.millisecondsSinceEpoch}';
@@ -408,14 +432,18 @@ class GoogleDriveService {
           ...utf8.encode(bodyEnd),
         ];
 
-        final resp = await request.send();
+        final streamResp = await request.send();
+        final resp = await http.Response.fromStream(streamResp);
         if (resp.statusCode != 200) {
           return BackupResult(
             success: false,
-            message: 'Gagal upload backup: ${resp.statusCode}',
+            message: _parseHttpError(resp, defaultMsg: 'Gagal upload backup: ${resp.statusCode}'),
           );
         }
       }
+
+      // Keep max 5 snapshots
+      await _pruneOldSnapshots(headers, folderId);
 
       return BackupResult(
         success: true,
@@ -427,8 +455,8 @@ class GoogleDriveService {
     }
   }
 
-  /// Restore database from Google Drive
-  static Future<BackupResult> restore() async {
+  /// Restore database from Google Drive with pre-restore safety snapshot and rollback protection
+  static Future<BackupResult> restore({String? fileId}) async {
     try {
       final headers = await _getAuthHeaders();
       if (headers == null) {
@@ -442,12 +470,12 @@ class GoogleDriveService {
       if (folderId == null) {
         return BackupResult(
           success: false,
-          message: 'Folder backup tidak ditemukan',
+          message: _lastError ?? 'Folder backup tidak ditemukan',
         );
       }
 
-      final fileId = await _findExistingBackup(headers, folderId);
-      if (fileId == null) {
+      final targetFileId = fileId ?? await _findExistingBackup(headers, folderId);
+      if (targetFileId == null) {
         return BackupResult(
           success: false,
           message: 'Tidak ada file backup di Google Drive',
@@ -455,7 +483,7 @@ class GoogleDriveService {
       }
 
       final downloadUrl = Uri.parse(
-        'https://www.googleapis.com/drive/v3/files/$fileId?alt=media',
+        'https://www.googleapis.com/drive/v3/files/$targetFileId?alt=media',
       );
       final resp = await http
           .get(downloadUrl, headers: headers)
@@ -464,17 +492,25 @@ class GoogleDriveService {
       if (resp.statusCode != 200) {
         return BackupResult(
           success: false,
-          message: 'Gagal download backup: ${resp.statusCode}',
+          message: _parseHttpError(resp, defaultMsg: 'Gagal download backup: ${resp.statusCode}'),
         );
       }
 
-      // Close active database handle before overwriting file
+      // Close active database handle before touching files
       await DatabaseService().closeDatabase();
 
       final dbPath = join(await getDatabasesPath(), 'myduit.db');
       final dbFile = File(dbPath);
+      final snapshotFile = File('$dbPath.safety_snapshot');
       final walFile = File('$dbPath-wal');
       final shmFile = File('$dbPath-shm');
+
+      // Create pre-restore safety snapshot
+      if (await dbFile.exists()) {
+        try {
+          await dbFile.copy(snapshotFile.path);
+        } catch (_) {}
+      }
 
       // Remove leftover WAL/SHM files to prevent SQLite log corruption
       if (await walFile.exists()) {
@@ -490,17 +526,92 @@ class GoogleDriveService {
 
       await dbFile.writeAsBytes(resp.bodyBytes);
 
-      // Reopen database and verify schema migrations
-      await DatabaseService().database;
+      // Verify SQLite database integrity
+      final isHealthy = await DatabaseService().integrityCheck();
+      if (!isHealthy) {
+        // Rollback to safety snapshot
+        await DatabaseService().closeDatabase();
+        if (await snapshotFile.exists()) {
+          await snapshotFile.copy(dbFile.path);
+          try {
+            await snapshotFile.delete();
+          } catch (_) {}
+        }
+        await DatabaseService().database;
+        return BackupResult(
+          success: false,
+          message: 'File cadangan korup atau tidak valid. Database telah di-rollback secara aman.',
+        );
+      }
+
+      // Success: clean up snapshot file
+      if (await snapshotFile.exists()) {
+        try {
+          await snapshotFile.delete();
+        } catch (_) {}
+      }
 
       return BackupResult(
         success: true,
-        message: 'Restore berhasil! Data telah diperbarui.',
+        message: 'Restore berhasil! Integritas database telah diverifikasi.',
         timestamp: DateTime.now(),
       );
     } catch (e) {
       return BackupResult(success: false, message: 'Error: $e');
     }
+  }
+
+  /// List all snapshots in Google Drive folder
+  static Future<List<DriveBackupInfo>> getBackupList() async {
+    try {
+      final headers = await _getAuthHeaders();
+      if (headers == null) return [];
+
+      final folderId = await _getOrCreateFolder(headers);
+      if (folderId == null) return [];
+
+      final url = Uri.parse(
+        'https://www.googleapis.com/drive/v3/files'
+        "?q='$folderId'+in+parents+and+trashed=false+and+(name='$_backupFileName'+or+name+contains+'myduit_backup')"
+        '&fields=files(id,name,modifiedTime,size,description)'
+        '&orderBy=modifiedTime+desc',
+      );
+      final resp = await http
+          .get(url, headers: headers)
+          .timeout(const Duration(seconds: 30));
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        final files = data['files'] as List;
+        return files.map((f) {
+          return DriveBackupInfo(
+            fileId: f['id'] as String,
+            fileName: f['name'] as String? ?? _backupFileName,
+            modifiedTime: DateTime.tryParse(f['modifiedTime'] as String? ?? '') ?? DateTime.now(),
+            sizeBytes: int.tryParse(f['size']?.toString() ?? '0') ?? 0,
+            description: f['description'] as String?,
+          );
+        }).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  /// Prune old backup snapshots, retaining max 5
+  static Future<void> _pruneOldSnapshots(
+    Map<String, String> headers,
+    String folderId,
+  ) async {
+    try {
+      final list = await getBackupList();
+      if (list.length > 5) {
+        for (int i = 5; i < list.length; i++) {
+          final id = list[i].fileId;
+          final delUrl = Uri.parse('https://www.googleapis.com/drive/v3/files/$id');
+          await http.delete(delUrl, headers: headers);
+        }
+      }
+    } catch (_) {}
   }
 
   static Future<String?> _findExistingBackup(
@@ -525,35 +636,8 @@ class GoogleDriveService {
   }
 
   static Future<DriveBackupInfo?> getBackupInfo() async {
-    try {
-      final headers = await _getAuthHeaders();
-      if (headers == null) return null;
-
-      final folderId = await _getOrCreateFolder(headers);
-      if (folderId == null) return null;
-
-      final url = Uri.parse(
-        'https://www.googleapis.com/drive/v3/files'
-        '?q=name%3D%27$_backupFileName%27%20and%20%27$folderId%27%20in%20parents%20and%20trashed%3Dfalse'
-        '&fields=files(id,name,modifiedTime,size)',
-      );
-      final resp = await http
-          .get(url, headers: headers)
-          .timeout(const Duration(seconds: 30));
-
-      if (resp.statusCode == 200) {
-        final data = jsonDecode(resp.body);
-        final files = data['files'] as List;
-        if (files.isNotEmpty) {
-          final f = files.first;
-          return DriveBackupInfo(
-            fileId: f['id'] as String,
-            modifiedTime: DateTime.parse(f['modifiedTime'] as String),
-            sizeBytes: int.tryParse(f['size']?.toString() ?? '0') ?? 0,
-          );
-        }
-      }
-    } catch (_) {}
+    final list = await getBackupList();
+    if (list.isNotEmpty) return list.first;
     return null;
   }
 
@@ -569,13 +653,17 @@ class GoogleDriveService {
 
 class DriveBackupInfo {
   final String fileId;
+  final String fileName;
   final DateTime modifiedTime;
   final int sizeBytes;
+  final String? description;
 
   DriveBackupInfo({
     required this.fileId,
+    this.fileName = 'myduit_backup.db',
     required this.modifiedTime,
     required this.sizeBytes,
+    this.description,
   });
 
   String get formattedSize {
