@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../models/transaction_model.dart';
 import '../providers/custom_category_provider.dart';
+import '../providers/theme_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../utils/formatters.dart';
@@ -14,8 +15,10 @@ class BalanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TransactionProvider>();
+    final themeProvider = context.watch<ThemeProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = isDark ? AppColors.primaryDark : AppColors.primaryLight;
+    final isPrivacy = themeProvider.isPrivacyMode;
 
     final now = DateTime.now();
     final isCurrentMonth =
@@ -39,15 +42,32 @@ class BalanceCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Total Saldo',
-                style: TextStyle(
-                  color: isDark
-                      ? AppColors.surfaceDark.withValues(alpha: 0.7)
-                      : Colors.white.withValues(alpha: 0.8),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
+              Row(
+                children: [
+                  Text(
+                    'Total Saldo',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.surfaceDark.withValues(alpha: 0.7)
+                          : Colors.white.withValues(alpha: 0.8),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => themeProvider.togglePrivacyMode(),
+                    child: Icon(
+                      isPrivacy
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                      size: 18,
+                      color: isDark
+                          ? AppColors.surfaceDark.withValues(alpha: 0.7)
+                          : Colors.white.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
               ),
               if (provider.totalExpense > 0)
                 Container(
@@ -65,7 +85,9 @@ class BalanceCard extends StatelessWidget {
                       const Text('🔥', style: TextStyle(fontSize: 11)),
                       const SizedBox(width: 4),
                       Text(
-                        '${CurrencyFormatter.formatCompact(dailyPace)}/hari',
+                        isPrivacy
+                            ? '••••/hari'
+                            : '${CurrencyFormatter.formatCompact(dailyPace)}/hari',
                         style: TextStyle(
                           color: isDark ? AppColors.surfaceDark : Colors.white,
                           fontSize: 11,
@@ -79,7 +101,7 @@ class BalanceCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            CurrencyFormatter.format(provider.balance),
+            isPrivacy ? 'Rp ••••••••' : CurrencyFormatter.format(provider.balance),
             style: TextStyle(
               color: isDark ? AppColors.surfaceDark : Colors.white,
               fontSize: 32,
@@ -97,6 +119,7 @@ class BalanceCard extends StatelessWidget {
                   icon: Icons.arrow_downward_rounded,
                   isIncome: true,
                   isDark: isDark,
+                  isPrivacy: isPrivacy,
                 ),
               ),
               const SizedBox(width: 16),
@@ -107,6 +130,7 @@ class BalanceCard extends StatelessWidget {
                   icon: Icons.arrow_upward_rounded,
                   isIncome: false,
                   isDark: isDark,
+                  isPrivacy: isPrivacy,
                 ),
               ),
             ],
@@ -123,6 +147,7 @@ class _MiniStat extends StatelessWidget {
   final IconData icon;
   final bool isIncome;
   final bool isDark;
+  final bool isPrivacy;
 
   const _MiniStat({
     required this.label,
@@ -130,6 +155,7 @@ class _MiniStat extends StatelessWidget {
     required this.icon,
     required this.isIncome,
     required this.isDark,
+    this.isPrivacy = false,
   });
 
   @override
@@ -172,7 +198,7 @@ class _MiniStat extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  CurrencyFormatter.formatCompact(amount),
+                  isPrivacy ? '••••••' : CurrencyFormatter.formatCompact(amount),
                   style: TextStyle(
                     color: textColor,
                     fontSize: 14,

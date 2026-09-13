@@ -218,8 +218,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             const SizedBox(height: 24),
 
             // Amount field
-            Text('Jumlah', style: theme.textTheme.labelLarge),
-            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Jumlah', style: theme.textTheme.labelLarge),
+                IconButton(
+                  icon: const Icon(Icons.calculate_rounded, size: 20),
+                  tooltip: 'Kalkulator Cepat',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _showMiniCalculator(context, isDark),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
             TextFormField(
               controller: _amountController,
               keyboardType: TextInputType.number,
@@ -239,6 +250,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   color: isIncome ? AppColors.income : AppColors.expense,
                 ),
                 hintText: '0',
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.calculate_outlined),
+                  tooltip: 'Kalkulator',
+                  onPressed: () => _showMiniCalculator(context, isDark),
+                ),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
@@ -826,6 +842,27 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
+  void _showMiniCalculator(BuildContext context, bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => _MiniCalcSheet(
+        initialValue: RupiahInputFormatter.parse(_amountController.text),
+        isDark: isDark,
+        onResult: (result) {
+          setState(() {
+            _amountController.text = CurrencyInputService.isFormatted
+                ? RupiahInputFormatter.formatNumber(result)
+                : result.toStringAsFixed(0);
+          });
+        },
+      ),
+    );
+  }
+
   void _applyTemplate(TransactionTemplateModel tpl) {
     HapticFeedback.selectionClick();
     setState(() {
@@ -942,3 +979,246 @@ class _TypeTab extends StatelessWidget {
     );
   }
 }
+
+class _MiniCalcSheet extends StatefulWidget {
+  final double initialValue;
+  final bool isDark;
+  final ValueChanged<double> onResult;
+
+  const _MiniCalcSheet({
+    required this.initialValue,
+    required this.isDark,
+    required this.onResult,
+  });
+
+  @override
+  State<_MiniCalcSheet> createState() => _MiniCalcSheetState();
+}
+
+class _MiniCalcSheetState extends State<_MiniCalcSheet> {
+  String _expression = '';
+  String _display = '0';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialValue > 0) {
+      _display = widget.initialValue.toStringAsFixed(0);
+      _expression = _display;
+    }
+  }
+
+  void _onPress(String val) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (val == 'C') {
+        _expression = '';
+        _display = '0';
+      } else if (val == '⌫') {
+        if (_expression.isNotEmpty) {
+          _expression = _expression.substring(0, _expression.length - 1);
+          _display = _expression.isEmpty ? '0' : _expression;
+        }
+      } else if (val == '=') {
+        _evaluate();
+      } else if (['+', '-', '×', '÷'].contains(val)) {
+        if (_expression.isNotEmpty && !['+', '-', '×', '÷'].contains(_expression[_expression.length - 1])) {
+          _expression += val;
+          _display = _expression;
+        }
+      } else if (val == '000') {
+        if (_expression.isNotEmpty && _expression != '0') {
+          _expression += '000';
+          _display = _expression;
+        }
+      } else {
+        if (_expression == '0') {
+          _expression = val;
+        } else {
+          _expression += val;
+        }
+        _display = _expression;
+      }
+    });
+  }
+
+  void _evaluate() {
+    try {
+      final sanitized = _expression.replaceAll('×', '*').replaceAll('÷', '/');
+      final result = _computeExpression(sanitized);
+      if (result != null && result >= 0) {
+        setState(() {
+          _display = result % 1 == 0 ? result.toInt().toString() : result.toStringAsFixed(2);
+          _expression = _display;
+        });
+      }
+    } catch (_) {}
+  }
+
+  double? _computeExpression(String expr) {
+    if (expr.isEmpty) return null;
+    // Simple recursive/iterative parser for +, -, *, /
+    final tokens = <String>[];
+    String current = '';
+    for (int i = 0; i < expr.length; i++) {
+      final char = expr[i];
+      if (['+', '-', '*', '/'].contains(char)) {
+        if (current.isNotEmpty) {
+          tokens.add(current);
+          current = '';
+        }
+        tokens.add(char);
+      } else {
+        current += char;
+      }
+    }
+    if (current.isNotEmpty) tokens.add(current);
+    if (tokens.isEmpty) return null;
+
+    // Stage 1: Multiply and Divide
+    final stage1 = <String>[];
+    int i = 0;
+    while (i < tokens.length) {
+      if (tokens[i] == '*' || tokens[i] == '/') {
+        final op = tokens[i];
+        final prev = double.tryParse(stage1.removeLast()) ?? 0;
+        final next = (i + 1 < tokens.length) ? (double.tryParse(tokens[i + 1]) ?? 1) : 1;
+        final res = op == '*' ? (prev * next) : (next != 0 ? prev / next : 0.0);
+        stage1.add(res.toString());
+        i += 2;
+      } else {
+        stage1.add(tokens[i]);
+        i++;
+      }
+    }
+
+    // Stage 2: Add and Subtract
+    if (stage1.isEmpty) return null;
+    double result = double.tryParse(stage1[0]) ?? 0;
+    int j = 1;
+    while (j < stage1.length) {
+      final op = stage1[j];
+      final next = (j + 1 < stage1.length) ? (double.tryParse(stage1[j + 1]) ?? 0) : 0;
+      if (op == '+') result += next;
+      if (op == '-') result -= next;
+      j += 2;
+    }
+    return result;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accentColor = widget.isDark ? AppColors.primaryDark : AppColors.primaryLight;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.calculate_rounded, color: accentColor),
+                    const SizedBox(width: 8),
+                    Text('Kalkulator Cepat', style: theme.textTheme.titleMedium),
+                  ],
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    _evaluate();
+                    final val = double.tryParse(_display) ?? 0;
+                    widget.onResult(val);
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.check_rounded, size: 18),
+                  label: const Text('Gunakan'),
+                  style: TextButton.styleFrom(foregroundColor: accentColor),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: widget.isDark ? AppColors.cardAltDark : AppColors.cardAltLight,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              alignment: Alignment.centerRight,
+              child: Text(
+                _display.isEmpty ? '0' : _display,
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildKeypad(accentColor),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKeypad(Color accentColor) {
+    final keys = [
+      ['C', '⌫', '÷', '×'],
+      ['7', '8', '9', '-'],
+      ['4', '5', '6', '+'],
+      ['1', '2', '3', '='],
+      ['0', '000', '.', '='],
+    ];
+
+    return Column(
+      children: keys.map((row) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            children: row.map((key) {
+              final isOp = ['+', '-', '×', '÷', '='].contains(key);
+              final isSpecial = ['C', '⌫'].contains(key);
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Material(
+                    color: isOp
+                        ? accentColor.withValues(alpha: 0.18)
+                        : (isSpecial
+                            ? AppColors.expense.withValues(alpha: 0.12)
+                            : (widget.isDark ? AppColors.cardAltDark : AppColors.surfaceLight)),
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      onTap: () => _onPress(key),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        height: 46,
+                        alignment: Alignment.center,
+                        child: Text(
+                          key,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: isOp
+                                ? accentColor
+                                : (isSpecial ? AppColors.expense : null),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+

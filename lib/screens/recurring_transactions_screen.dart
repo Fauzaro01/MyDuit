@@ -7,8 +7,10 @@ import '../models/recurring_transaction_model.dart';
 import '../models/transaction_model.dart';
 import '../models/wallet_model.dart';
 import '../providers/recurring_provider.dart';
+import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../providers/custom_category_provider.dart';
+import '../services/recurring_detector_service.dart';
 import '../utils/formatters.dart';
 
 class RecurringTransactionsScreen extends StatefulWidget {
@@ -58,53 +60,83 @@ class _RecurringTransactionsScreenState
       ),
       body: provider.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : (active.isEmpty && inactive.isEmpty)
-          ? _buildEmpty(theme)
-          : ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                if (active.isNotEmpty) ...[
-                  _SectionHeader(title: 'Aktif (${active.length})'),
-                  const SizedBox(height: 12),
-                  ...active.asMap().entries.map(
-                    (entry) =>
-                        _RecurringTile(
-                              recurring: entry.value,
-                              isDark: isDark,
-                              onTap: () =>
-                                  _showAddEditDialog(context, entry.value),
-                              onToggle: () =>
-                                  provider.toggleActive(entry.value),
-                              onDelete: () => _confirmDelete(
-                                context,
-                                provider,
-                                entry.value.id,
-                              ),
-                            )
-                            .animate()
-                            .fadeIn(
-                              delay: (entry.key * 60).ms,
-                              duration: 400.ms,
-                            )
-                            .slideX(begin: 0.05, end: 0),
-                  ),
-                ],
-                if (inactive.isNotEmpty) ...[
-                  const SizedBox(height: 24),
-                  _SectionHeader(title: 'Nonaktif (${inactive.length})'),
-                  const SizedBox(height: 12),
-                  ...inactive.asMap().entries.map(
-                    (entry) => _RecurringTile(
-                      recurring: entry.value,
-                      isDark: isDark,
-                      onTap: () => _showAddEditDialog(context, entry.value),
-                      onToggle: () => provider.toggleActive(entry.value),
-                      onDelete: () =>
-                          _confirmDelete(context, provider, entry.value.id),
-                    ),
-                  ),
-                ],
-              ],
+          : Builder(
+              builder: (context) {
+                final txProvider = context.watch<TransactionProvider>();
+                final allRecurrings = [...active, ...inactive];
+                final suggestions = RecurringDetectorService.detectPatterns(
+                  txProvider.transactions,
+                  existingRecurring: allRecurrings,
+                );
+
+                if (active.isEmpty && inactive.isEmpty && suggestions.isEmpty) {
+                  return _buildEmpty(theme);
+                }
+
+                return ListView(
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    if (suggestions.isNotEmpty) ...[
+                      _SectionHeader(title: 'Saran Terdeteksi Otomatis ✨ (${suggestions.length})'),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Pola transaksi berulang ditemukan dari riwayat Anda:',
+                        style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                      ),
+                      const SizedBox(height: 12),
+                      ...suggestions.map(
+                        (pattern) => _SuggestedPatternTile(
+                          pattern: pattern,
+                          isDark: isDark,
+                          onAccept: () => _applySuggestion(context, pattern),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                    if (active.isNotEmpty) ...[
+                      _SectionHeader(title: 'Aktif (${active.length})'),
+                      const SizedBox(height: 12),
+                      ...active.asMap().entries.map(
+                        (entry) =>
+                            _RecurringTile(
+                                  recurring: entry.value,
+                                  isDark: isDark,
+                                  onTap: () =>
+                                      _showAddEditDialog(context, entry.value),
+                                  onToggle: () =>
+                                      provider.toggleActive(entry.value),
+                                  onDelete: () => _confirmDelete(
+                                    context,
+                                    provider,
+                                    entry.value.id,
+                                  ),
+                                )
+                                .animate()
+                                .fadeIn(
+                                  delay: (entry.key * 60).ms,
+                                  duration: 400.ms,
+                                )
+                                .slideX(begin: 0.05, end: 0),
+                      ),
+                    ],
+                    if (inactive.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      _SectionHeader(title: 'Nonaktif (${inactive.length})'),
+                      const SizedBox(height: 12),
+                      ...inactive.asMap().entries.map(
+                        (entry) => _RecurringTile(
+                          recurring: entry.value,
+                          isDark: isDark,
+                          onTap: () => _showAddEditDialog(context, entry.value),
+                          onToggle: () => provider.toggleActive(entry.value),
+                          onDelete: () =>
+                              _confirmDelete(context, provider, entry.value.id),
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
     );
   }
@@ -196,6 +228,21 @@ class _RecurringTransactionsScreenState
       backgroundColor: Colors.transparent,
       builder: (ctx) => _AddEditRecurringSheet(existing: existing),
     );
+  }
+
+  void _applySuggestion(BuildContext context, DetectedRecurringPattern pattern) {
+    final recurring = RecurringTransactionModel(
+      title: pattern.title,
+      amount: pattern.amount,
+      type: pattern.type,
+      category: pattern.category,
+      customCategoryId: pattern.customCategoryId,
+      walletId: pattern.walletId,
+      frequency: pattern.frequency,
+      startDate: DateTime.now(),
+      isActive: true,
+    );
+    _showAddEditDialog(context, recurring);
   }
 }
 
@@ -831,6 +878,107 @@ class _DateButton extends StatelessWidget {
 }
 
 // ── Section Header ──────────────────────────────────────────
+class _SuggestedPatternTile extends StatelessWidget {
+  final DetectedRecurringPattern pattern;
+  final bool isDark;
+  final VoidCallback onAccept;
+
+  const _SuggestedPatternTile({
+    required this.pattern,
+    required this.isDark,
+    required this.onAccept,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isIncome = pattern.type == TransactionType.income;
+    final color = isIncome ? AppColors.income : AppColors.expense;
+    final customCatProvider = Provider.of<CustomCategoryProvider?>(context);
+    final customCat = (pattern.customCategoryId != null && customCatProvider != null)
+        ? customCatProvider.getCategoryById(pattern.customCategoryId!)
+        : null;
+    final emoji = customCat?.emoji ?? pattern.category.icon;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: (isDark ? AppColors.primaryDark : AppColors.primaryLight).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: (isDark ? AppColors.primaryDark : AppColors.primaryLight).withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(
+                emoji,
+                style: const TextStyle(fontSize: 20),
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        pattern.title,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: (isDark ? AppColors.primaryDark : AppColors.primaryLight).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${(pattern.confidence * 100).toInt()}% cocok',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${pattern.frequency.label} · ${pattern.occurrenceCount}x terjadi · ${CurrencyFormatter.format(pattern.amount)}',
+                  style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          IconButton.filledTonal(
+            icon: const Icon(Icons.add_rounded, size: 20),
+            tooltip: 'Jadikan Berulang',
+            onPressed: onAccept,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
   final String title;
   const _SectionHeader({required this.title});

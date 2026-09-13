@@ -14,6 +14,8 @@ import 'add_transaction_screen.dart';
 import 'history_screen.dart';
 import 'transfer_screen.dart';
 import 'wallet_screen.dart';
+import 'badges_screen.dart';
+import '../services/gamification_engine.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -58,19 +60,74 @@ class HomeScreen extends StatelessWidget {
                               ),
                             ],
                           ),
-                          IconButton.filledTonal(
-                            icon: const Icon(Icons.search_rounded),
-                            tooltip: 'Cari Transaksi',
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const Scaffold(
-                                    body: HistoryScreen(),
-                                  ),
-                                ),
-                              );
-                            },
+                          Row(
+                            children: [
+                              Builder(
+                                builder: (context) {
+                                  final streak = GamificationEngine.calculateStreak(provider.transactions);
+                                  return Tooltip(
+                                    message: 'Streak Pencatatan: ${streak.currentStreak} Hari',
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(16),
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => const BadgesScreen(),
+                                          ),
+                                        );
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: streak.currentStreak > 0
+                                              ? const Color(0xFFFF7A00).withValues(alpha: 0.15)
+                                              : (theme.brightness == Brightness.dark ? Colors.white10 : Colors.black12),
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: streak.currentStreak > 0
+                                                ? const Color(0xFFFF7A00).withValues(alpha: 0.4)
+                                                : Colors.transparent,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Text('🔥', style: TextStyle(fontSize: 14)),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '${streak.currentStreak}d',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                                color: streak.currentStreak > 0
+                                                    ? const Color(0xFFFF7A00)
+                                                    : (theme.brightness == Brightness.dark ? Colors.white60 : Colors.black54),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton.filledTonal(
+                                icon: const Icon(Icons.search_rounded),
+                                tooltip: 'Cari Transaksi',
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const Scaffold(
+                                        body: HistoryScreen(),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
                           ),
                         ],
                       )
@@ -156,12 +213,48 @@ class HomeScreen extends StatelessWidget {
                         transaction: tx,
                         onDismissed: () {
                           provider.deleteTransaction(tx.id);
+                          ScaffoldMessenger.of(context).clearSnackBars();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Transaksi "${tx.title}" dihapus'),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              action: SnackBarAction(
+                                label: 'Undo',
+                                textColor: AppColors.primaryLight,
+                                onPressed: () {
+                                  provider.addTransaction(tx);
+                                },
+                              ),
+                            ),
+                          );
                         },
                         onTap: () {
                           showTransactionDetail(
                             context,
                             tx,
-                            onDeleted: () => provider.deleteTransaction(tx.id),
+                            onDeleted: () {
+                              provider.deleteTransaction(tx.id);
+                              ScaffoldMessenger.of(context).clearSnackBars();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Transaksi "${tx.title}" dihapus'),
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  action: SnackBarAction(
+                                    label: 'Undo',
+                                    textColor: AppColors.primaryLight,
+                                    onPressed: () {
+                                      provider.addTransaction(tx);
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
                           );
                         },
                       )

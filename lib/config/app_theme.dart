@@ -38,17 +38,18 @@ class AppColors {
 class AppTheme {
   static const String fontFamily = 'Plus Jakarta Sans';
 
-  static ThemeData lightTheme() {
+  static ThemeData lightTheme({Color? primaryAccent}) {
+    final primary = primaryAccent ?? AppColors.primaryLight;
     final base = ThemeData.light(useMaterial3: true);
     return base.copyWith(
       scaffoldBackgroundColor: AppColors.surfaceLight,
       colorScheme: ColorScheme.light(
-        primary: AppColors.primaryLight,
+        primary: primary,
         onPrimary: Colors.white,
         surface: AppColors.surfaceLight,
         onSurface: AppColors.textPrimaryLight,
-        secondary: AppColors.primaryLight.withValues(alpha: 0.1),
-        onSecondary: AppColors.primaryLight,
+        secondary: primary.withValues(alpha: 0.1),
+        onSecondary: primary,
         error: AppColors.expense,
       ),
       cardTheme: CardThemeData(
@@ -172,17 +173,18 @@ class AppTheme {
     );
   }
 
-  static ThemeData darkTheme() {
+  static ThemeData darkTheme({Color? primaryAccent}) {
+    final primary = primaryAccent ?? AppColors.primaryDark;
     final base = ThemeData.dark(useMaterial3: true);
     return base.copyWith(
       scaffoldBackgroundColor: AppColors.surfaceDark,
       colorScheme: ColorScheme.dark(
-        primary: AppColors.primaryDark,
+        primary: primary,
         onPrimary: AppColors.surfaceDark,
         surface: AppColors.surfaceDark,
         onSurface: AppColors.textPrimaryDark,
-        secondary: AppColors.primaryDark.withValues(alpha: 0.15),
-        onSecondary: AppColors.primaryDark,
+        secondary: primary.withValues(alpha: 0.15),
+        onSecondary: primary,
         error: AppColors.expense,
       ),
       cardTheme: CardThemeData(

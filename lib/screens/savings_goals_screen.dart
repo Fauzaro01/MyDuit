@@ -10,6 +10,7 @@ import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../utils/formatters.dart';
 import '../widgets/emoji_picker_sheet.dart';
+import '../services/auto_allocation_engine.dart';
 
 class SavingsGoalsScreen extends StatefulWidget {
   const SavingsGoalsScreen({super.key});
@@ -37,7 +38,17 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
     final completed = provider.completedGoals;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Tujuan Tabungan')),
+      appBar: AppBar(
+        title: const Text('Tujuan Tabungan'),
+        actions: [
+          if (active.length > 1)
+            IconButton(
+              icon: const Icon(Icons.auto_awesome_rounded),
+              tooltip: 'Alokasi Cerdas Multi-Target',
+              onPressed: () => _showAutoAllocationSheet(context, active),
+            ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddGoalSheet(context),
         backgroundColor: isDark
@@ -167,6 +178,18 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _AddGoalSheet(existing: existing),
+    );
+  }
+
+  void _showAutoAllocationSheet(
+    BuildContext context,
+    List<SavingsGoalModel> activeGoals,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AutoAllocationSheet(activeGoals: activeGoals),
     );
   }
 
@@ -921,6 +944,288 @@ class _AddGoalSheetState extends State<_AddGoalSheet> {
       provider.addGoal(goal);
     }
     Navigator.pop(context);
+  }
+}
+
+// ── Multi-Goal Auto Allocation Sheet ────────────────────────
+class _AutoAllocationSheet extends StatefulWidget {
+  final List<SavingsGoalModel> activeGoals;
+  const _AutoAllocationSheet({required this.activeGoals});
+
+  @override
+  State<_AutoAllocationSheet> createState() => _AutoAllocationSheetState();
+}
+
+class _AutoAllocationSheetState extends State<_AutoAllocationSheet> {
+  final _amountController = TextEditingController();
+  AllocationStrategy _strategy = AllocationStrategy.proportional;
+  String? _selectedWalletId;
+  bool _syncWallet = true;
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final wallets = context.watch<WalletProvider>().wallets;
+    _selectedWalletId ??= wallets.isNotEmpty ? wallets.first.id : null;
+
+    final inputAmount = RupiahInputFormatter.parse(_amountController.text);
+    final allocations = AutoAllocationEngine.calculateAllocation(
+      depositAmount: inputAmount,
+      activeGoals: widget.activeGoals,
+      strategy: _strategy,
+    );
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        24,
+        20,
+        24,
+        MediaQuery.viewInsetsOf(context).bottom + 24,
+      ),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.cardDark : AppColors.cardLight,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Icon(Icons.auto_awesome_rounded, color: Colors.amber, size: 28),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Alokasi Tabungan Cerdas', style: theme.textTheme.titleLarge),
+                      Text(
+                        'Distribusikan dana ke beberapa target sekaligus',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            TextFormField(
+              controller: _amountController,
+              decoration: InputDecoration(
+                labelText: 'Total Dana yang Ingin Ditabung',
+                prefixText: CurrencyInputService.isFormatted ? 'Rp ' : null,
+                prefixIcon: const Icon(Icons.account_balance_wallet_rounded, size: 20),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              keyboardType: TextInputType.number,
+              inputFormatters: CurrencyInputService.isFormatted
+                  ? [RupiahInputFormatter()]
+                  : [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (_) => setState(() {}),
+              autofocus: true,
+            ),
+            const SizedBox(height: 16),
+            Text('Strategi Distribusi:', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            SegmentedButton<AllocationStrategy>(
+              segments: const [
+                ButtonSegment(
+                  value: AllocationStrategy.proportional,
+                  label: Text('Proporsional', style: TextStyle(fontSize: 11)),
+                ),
+                ButtonSegment(
+                  value: AllocationStrategy.equal,
+                  label: Text('Bagi Rata', style: TextStyle(fontSize: 11)),
+                ),
+                ButtonSegment(
+                  value: AllocationStrategy.priorityFirst,
+                  label: Text('Prioritas', style: TextStyle(fontSize: 11)),
+                ),
+              ],
+              selected: {_strategy},
+              onSelectionChanged: (set) => setState(() => _strategy = set.first),
+            ),
+            const SizedBox(height: 16),
+            if (allocations.isNotEmpty) ...[
+              Text('Pratinjau Pembagian:', style: theme.textTheme.titleSmall),
+              const SizedBox(height: 8),
+              ...allocations.map((alloc) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: alloc.willComplete
+                          ? AppColors.income.withValues(alpha: 0.5)
+                          : (isDark ? Colors.white10 : Colors.black12),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(alloc.emoji, style: const TextStyle(fontSize: 20)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              alloc.goalTitle,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            Text(
+                              'Hasil: ${CurrencyFormatter.formatCompact(alloc.newCurrentAmount)} / ${CurrencyFormatter.formatCompact(alloc.targetAmount)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '+ ${CurrencyFormatter.format(alloc.allocatedAmount)}',
+                            style: const TextStyle(
+                              color: AppColors.income,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          if (alloc.willComplete)
+                            const Text(
+                              'Target Tercapai! 🎉',
+                              style: TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 14),
+            ],
+            if (wallets.isNotEmpty) ...[
+              Row(
+                children: [
+                  SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: Checkbox(
+                      value: _syncWallet,
+                      onChanged: (v) => setState(() => _syncWallet = v ?? false),
+                      activeColor: theme.colorScheme.primary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _syncWallet = !_syncWallet),
+                      child: Text(
+                        'Potong dari saldo dompet',
+                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_syncWallet) ...[
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedWalletId,
+                  decoration: InputDecoration(
+                    labelText: 'Pilih Dompet Sumber',
+                    prefixIcon: const Icon(Icons.account_balance_wallet_rounded, size: 20),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  items: wallets.map((w) {
+                    final bal = context.read<WalletProvider>().walletBalances[w.id] ?? 0.0;
+                    return DropdownMenuItem(
+                      value: w.id,
+                      child: Text('${w.name} (${CurrencyFormatter.formatCompact(bal)})'),
+                    );
+                  }).toList(),
+                  onChanged: (val) => setState(() => _selectedWalletId = val),
+                ),
+              ],
+              const SizedBox(height: 20),
+            ],
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: FilledButton.icon(
+                onPressed: inputAmount > 0 && allocations.isNotEmpty ? _applyAllocation : null,
+                icon: const Icon(Icons.check_circle_rounded),
+                label: const Text('Terapkan Alokasi', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _applyAllocation() async {
+    final inputAmount = RupiahInputFormatter.parse(_amountController.text);
+    if (inputAmount <= 0) return;
+
+    final allocations = AutoAllocationEngine.calculateAllocation(
+      depositAmount: inputAmount,
+      activeGoals: widget.activeGoals,
+      strategy: _strategy,
+    );
+
+    final savingsProvider = context.read<SavingsProvider>();
+    final txProvider = Provider.of<TransactionProvider?>(context, listen: false);
+    final walletProvider = Provider.of<WalletProvider?>(context, listen: false);
+
+    for (final alloc in allocations) {
+      if (alloc.allocatedAmount > 0) {
+        await savingsProvider.addAmountToGoal(alloc.goalId, alloc.allocatedAmount);
+      }
+    }
+
+    if (_syncWallet && _selectedWalletId != null && txProvider != null) {
+      await txProvider.addTransaction(
+        TransactionModel(
+          title: 'Alokasi Multi-Tabungan',
+          amount: inputAmount,
+          type: TransactionType.expense,
+          category: TransactionCategory.other,
+          walletId: _selectedWalletId,
+          date: DateTime.now(),
+          note: 'Distribusi otomatis ke ${allocations.length} target tabungan',
+        ),
+      );
+      await walletProvider?.refreshBalances();
+    }
+
+    if (mounted) {
+      Navigator.pop(context);
+    }
   }
 }
 
