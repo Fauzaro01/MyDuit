@@ -6,6 +6,7 @@ import '../config/app_theme.dart';
 import '../models/transaction_model.dart';
 import '../providers/custom_category_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../providers/currency_provider.dart';
 import '../utils/formatters.dart';
 import '../screens/add_transaction_screen.dart';
 
@@ -113,6 +114,35 @@ void showTransactionDetail(
               ),
             ),
           ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
+          // Multi-Currency Preview
+          Builder(
+            builder: (context) {
+              final currProvider = Provider.of<CurrencyProvider?>(context);
+              if (currProvider == null) return const SizedBox.shrink();
+              final usd = currProvider.convert(transaction.amount, fromCurrency: 'IDR', toCurrency: 'USD');
+              final sgd = currProvider.convert(transaction.amount, fromCurrency: 'IDR', toCurrency: 'SGD');
+              final jpy = currProvider.convert(transaction.amount, fromCurrency: 'IDR', toCurrency: 'JPY');
+              final eur = currProvider.convert(transaction.amount, fromCurrency: 'IDR', toCurrency: 'EUR');
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.cardAltDark : AppColors.cardAltLight,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Text('🇺🇸 \$${usd.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                    Text('🇸🇬 S\$${sgd.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                    Text('🇪🇺 €${eur.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                    Text('🇯🇵 ¥${jpy.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              );
+            },
+          ),
           const SizedBox(height: 4),
 
           // Title

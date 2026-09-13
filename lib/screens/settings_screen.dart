@@ -27,6 +27,8 @@ import 'subscription_screen.dart';
 import 'net_worth_screen.dart';
 import 'financial_advisor_screen.dart';
 import 'financial_calculator_screen.dart';
+import 'badges_screen.dart';
+import 'monthly_recap_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -82,6 +84,36 @@ class SettingsScreen extends StatelessWidget {
                 subtitle: 'Bagikan laporan keuangan (CSV/PDF)',
                 trailing: const Icon(Icons.chevron_right_rounded, size: 22),
                 onTap: () => _showExportDialog(context),
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.emoji_events_outlined,
+                title: 'Pencapaian & Streak',
+                subtitle: 'Pelacak konsistensi & koleksi medali',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BadgesScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.auto_awesome_motion_rounded,
+                title: 'Kilas Balik Finansial (Recap)',
+                subtitle: 'Infografis performa keuangan bulanan',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const MonthlyRecapScreen(),
+                    ),
+                  );
+                },
               ),
               const Divider(height: 1, indent: 56),
               _SettingsTile(
@@ -311,6 +343,38 @@ class SettingsScreen extends StatelessWidget {
                           );
                         }
                       },
+                      activeTrackColor: isDark
+                          ? AppColors.primaryDark
+                          : AppColors.primaryLight,
+                    ),
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  _SettingsTile(
+                    icon: Icons.color_lens_outlined,
+                    title: 'Aksen Warna Aplikasi',
+                    subtitle: themeProvider.accentColor.label,
+                    trailing: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? themeProvider.accentColor.darkColor
+                            : themeProvider.accentColor.lightColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    onTap: () => _showAccentColorPicker(context),
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  _SettingsTile(
+                    icon: Icons.visibility_outlined,
+                    title: 'Mode Privasi (Sensor Saldo)',
+                    subtitle: themeProvider.isPrivacyMode
+                        ? 'Saldo disamarkan (Rp ••••••••)'
+                        : 'Saldo ditampilkan normal',
+                    trailing: Switch.adaptive(
+                      value: themeProvider.isPrivacyMode,
+                      onChanged: (_) => themeProvider.togglePrivacyMode(),
                       activeTrackColor: isDark
                           ? AppColors.primaryDark
                           : AppColors.primaryLight,
@@ -781,6 +845,96 @@ class SettingsScreen extends StatelessWidget {
       default:
         return '$seconds detik';
     }
+  }
+
+  void _showAccentColorPicker(BuildContext context) {
+    final themeProvider = context.read<ThemeProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: (isDark ? AppColors.primaryDark : AppColors.primaryLight).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.color_lens_rounded,
+                        color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Pilih Aksen Warna',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ...AppAccentColor.values.map((accent) {
+                  final isSelected = themeProvider.accentColor == accent;
+                  final accentColor = isDark ? accent.darkColor : accent.lightColor;
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    leading: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: accentColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelected ? Colors.white : Colors.transparent,
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: accentColor.withValues(alpha: 0.35),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: isSelected
+                          ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
+                          : null,
+                    ),
+                    title: Text(
+                      accent.label,
+                      style: TextStyle(
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color: isSelected ? accentColor : null,
+                      ),
+                    ),
+                    trailing: isSelected
+                        ? Icon(Icons.check_circle_rounded, color: accentColor)
+                        : null,
+                    onTap: () {
+                      themeProvider.setAccentColor(accent);
+                      Navigator.pop(ctx);
+                    },
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _showLockTimeoutDialog(BuildContext context, AppLockProvider lockProvider) {

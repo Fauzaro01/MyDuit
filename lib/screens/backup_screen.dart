@@ -6,9 +6,15 @@ import '../providers/custom_category_provider.dart';
 import '../providers/debt_provider.dart';
 import '../providers/recurring_provider.dart';
 import '../providers/savings_provider.dart';
+import '../providers/split_bill_provider.dart';
+import '../providers/tag_provider.dart';
+import '../providers/subscription_provider.dart';
+import '../providers/asset_provider.dart';
+import '../providers/template_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../services/google_drive_service.dart';
+import '../services/local_backup_service.dart';
 
 class BackupScreen extends StatefulWidget {
   const BackupScreen({super.key});
@@ -549,28 +555,42 @@ class _BackupScreenState extends State<BackupScreen> {
                 .fadeIn(delay: 200.ms, duration: 400.ms)
                 .slideY(begin: 0.05, end: 0),
 
-            if (_statusMessage != null) ...[
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.cardDark : AppColors.cardAltLight,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline_rounded, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _statusMessage!,
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    ),
-                  ],
-                ),
+            // Offline Local Backup Section
+            const SizedBox(height: 28),
+            Text(
+              'CADANGAN LOKAL (OFFLINE / ENCRYPTED JSON)',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                letterSpacing: 1.2,
               ),
-            ],
+            ),
+            const SizedBox(height: 12),
+            _ActionCard(
+              isDark: isDark,
+              icon: Icons.file_upload_outlined,
+              title: 'Ekspor Cadangan Terenkripsi',
+              subtitle: 'Simpan file JSON dengan proteksi password',
+              color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+              isLoading: _isLoading,
+              onTap: _isLoading ? null : () => _exportOfflineBackup(context),
+            )
+                .animate()
+                .fadeIn(delay: 220.ms, duration: 400.ms)
+                .slideY(begin: 0.05, end: 0),
+            const SizedBox(height: 12),
+            _ActionCard(
+              isDark: isDark,
+              icon: Icons.file_download_outlined,
+              title: 'Impor Cadangan Offline',
+              subtitle: 'Pulihkan data dari file JSON',
+              color: Colors.orange,
+              isLoading: _isLoading,
+              onTap: _isLoading ? null : () => _importOfflineBackup(context),
+            )
+                .animate()
+                .fadeIn(delay: 240.ms, duration: 400.ms)
+                .slideY(begin: 0.05, end: 0),
           ],
         ],
       ),
@@ -601,6 +621,164 @@ class _BackupScreenState extends State<BackupScreen> {
           ),
         ),
       );
+    }
+  }
+
+  Future<void> _exportOfflineBackup(BuildContext context) async {
+    final passwordController = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Ekspor Cadangan Offline'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Masukkan password enkripsi opsional untuk mengamankan file:'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                hintText: 'Password enkripsi (opsional)',
+                prefixIcon: Icon(Icons.lock_outline_rounded),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+            ),
+            child: const Text('Ekspor & Bagikan'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _isLoading = true);
+      try {
+        await LocalBackupService.exportAndShare(
+          password: passwordController.text.trim().isEmpty ? null : passwordController.text.trim(),
+        );
+      } catch (e) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('Gagal ekspor: $e')),
+        );
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _importOfflineBackup(BuildContext context) async {
+    final jsonController = TextEditingController();
+    final passwordController = TextEditingController();
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final txP = context.read<TransactionProvider>();
+    final wP = context.read<WalletProvider>();
+    final rP = context.read<RecurringProvider>();
+    final sP = context.read<SavingsProvider>();
+    final dP = context.read<DebtProvider>();
+    final cP = context.read<CustomCategoryProvider>();
+    final sbP = context.read<SplitBillProvider>();
+    final tP = context.read<TagProvider>();
+    final subP = context.read<SubscriptionProvider>();
+    final aP = context.read<AssetProvider>();
+    final tplP = context.read<TemplateProvider>();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Impor Cadangan Offline'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Tempelkan teks JSON atau cipher cadangan:'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: jsonController,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: 'Paste teks JSON backup di sini...',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  hintText: 'Password enkripsi (jika ada)',
+                  prefixIcon: Icon(Icons.lock_outline_rounded),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.expense,
+            ),
+            child: const Text('Pulihkan Data'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && jsonController.text.trim().isNotEmpty) {
+      setState(() => _isLoading = true);
+      try {
+        final success = await LocalBackupService.importFromJsonString(
+          jsonController.text.trim(),
+          password: passwordController.text.trim().isEmpty ? null : passwordController.text.trim(),
+        );
+        if (success) {
+          await txP.loadData();
+          await wP.loadWallets();
+          await rP.loadRecurringTransactions();
+          await sP.loadGoals();
+          await dP.loadDebts();
+          await cP.loadCategories();
+          await sbP.loadBills();
+          await tP.loadTags();
+          await subP.loadSubscriptions();
+          await aP.loadAssets();
+          await tplP.loadTemplates();
+
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text('Data berhasil dipulihkan dari cadangan offline! 🎉'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('Gagal impor: $e')),
+        );
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 }

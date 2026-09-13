@@ -3,7 +3,11 @@ import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../models/transaction_model.dart';
 import '../providers/transaction_provider.dart';
+import '../providers/recurring_provider.dart';
+import '../providers/subscription_provider.dart';
+import '../providers/debt_provider.dart';
 import '../services/financial_advisor_service.dart';
+import '../services/cashflow_runway_service.dart';
 import '../utils/formatters.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/transaction_detail_sheet.dart';
@@ -108,6 +112,84 @@ class _FinancialAdvisorScreenState extends State<FinancialAdvisorScreen> {
             ),
           ),
           const SizedBox(height: 20),
+
+          // Cashflow Runway & Deficit Warning Section
+          Builder(
+            builder: (context) {
+              final recProvider = Provider.of<RecurringProvider?>(context);
+              final subProvider = Provider.of<SubscriptionProvider?>(context);
+              final debtProvider = Provider.of<DebtProvider?>(context);
+
+              final runway = CashflowRunwayService.analyzeRunway(
+                currentBalance: txProvider.balance,
+                recentTransactions: txProvider.transactions,
+                recurrings: recProvider?.recurringTransactions ?? [],
+                subscriptions: subProvider?.subscriptions ?? [],
+                debts: debtProvider?.debts ?? [],
+              );
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: runway.hasDeficitWarning
+                      ? AppColors.expense.withValues(alpha: 0.1)
+                      : (isDark ? AppColors.cardDark : AppColors.cardLight),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: runway.hasDeficitWarning
+                        ? AppColors.expense.withValues(alpha: 0.4)
+                        : (isDark ? Colors.white10 : Colors.black12),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          runway.hasDeficitWarning
+                              ? Icons.warning_rounded
+                              : Icons.flight_takeoff_rounded,
+                          color: runway.hasDeficitWarning
+                              ? AppColors.expense
+                              : (isDark ? AppColors.primaryDark : AppColors.primaryLight),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Simulasi Arus Kas & Runway (90 Hari)',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      runway.recommendation,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontSize: 13,
+                            color: runway.hasDeficitWarning ? AppColors.expense : null,
+                            fontWeight: runway.hasDeficitWarning ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildRunwayStat('30 Hari', runway.projectedBalance30d, isDark),
+                        _buildRunwayStat('60 Hari', runway.projectedBalance60d, isDark),
+                        _buildRunwayStat('90 Hari', runway.projectedBalance90d, isDark),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
 
           // Natural Query search bar
           Text('Tanya Pengeluaran Cepat', style: Theme.of(context).textTheme.titleMedium),
@@ -260,6 +342,30 @@ class _FinancialAdvisorScreenState extends State<FinancialAdvisorScreen> {
           }),
         ],
       ),
+    );
+  }
+
+  static Widget _buildRunwayStat(String label, double amount, bool isDark) {
+    final isNegative = amount < 0;
+    return Column(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          CurrencyFormatter.formatCompact(amount),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: isNegative ? AppColors.expense : AppColors.income,
+          ),
+        ),
+      ],
     );
   }
 

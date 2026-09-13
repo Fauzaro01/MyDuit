@@ -54,6 +54,63 @@ class _HistoryScreenState extends State<HistoryScreen>
     }
   }
 
+  void _setPresetDateRange(String preset) {
+    final now = DateTime.now();
+    DateTime start;
+    DateTime end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+    switch (preset) {
+      case 'today':
+        start = DateTime(now.year, now.month, now.day);
+        break;
+      case 'this_week':
+        start = now.subtract(Duration(days: now.weekday - 1));
+        start = DateTime(start.year, start.month, start.day);
+        break;
+      case 'this_month':
+        start = DateTime(now.year, now.month, 1);
+        break;
+      case 'last_30_days':
+        start = now.subtract(const Duration(days: 30));
+        start = DateTime(start.year, start.month, start.day);
+        break;
+      case 'this_year':
+        start = DateTime(now.year, 1, 1);
+        break;
+      default:
+        return;
+    }
+    setState(() => _selectedDateRange = DateTimeRange(start: start, end: end));
+  }
+
+  Widget _buildPresetDateChip(
+    String label,
+    String presetKey,
+    bool isDark,
+    ThemeData theme,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: ActionChip(
+        label: Text(label),
+        labelStyle: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: theme.colorScheme.primary,
+        ),
+        backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.08),
+        side: BorderSide(
+          color: theme.colorScheme.primary.withValues(alpha: 0.25),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+        onPressed: () => _setPresetDateRange(presetKey),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -388,6 +445,20 @@ class _HistoryScreenState extends State<HistoryScreen>
                       .fadeIn(duration: 300.ms)
                       .slideY(begin: -0.1, end: 0),
                 const MonthSelector(),
+                const SizedBox(height: 8),
+                // Quick Date Range Presets
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildPresetDateChip('Hari Ini', 'today', isDark, theme),
+                      _buildPresetDateChip('Minggu Ini', 'this_week', isDark, theme),
+                      _buildPresetDateChip('Bulan Ini', 'this_month', isDark, theme),
+                      _buildPresetDateChip('30 Hari', 'last_30_days', isDark, theme),
+                      _buildPresetDateChip('Tahun Ini', 'this_year', isDark, theme),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 8),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -820,13 +891,48 @@ class _TransactionList extends StatelessWidget {
                   transaction: tx,
                   onDismissed: () {
                     provider.deleteTransaction(tx.id);
+                    ScaffoldMessenger.of(context).clearSnackBars();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Transaksi "${tx.title}" dihapus'),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        action: SnackBarAction(
+                          label: 'Undo',
+                          textColor: AppColors.primaryLight,
+                          onPressed: () {
+                            provider.addTransaction(tx);
+                          },
+                        ),
+                      ),
+                    );
                   },
                   onTap: () {
                     showTransactionDetail(
                       context,
                       tx,
-                      onDeleted: () =>
-                          provider.deleteTransaction(tx.id),
+                      onDeleted: () {
+                        provider.deleteTransaction(tx.id);
+                        ScaffoldMessenger.of(context).clearSnackBars();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Transaksi "${tx.title}" dihapus'),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            action: SnackBarAction(
+                              label: 'Undo',
+                              textColor: AppColors.primaryLight,
+                              onPressed: () {
+                                provider.addTransaction(tx);
+                              },
+                            ),
+                          ),
+                        );
+                      },
                     );
                   },
                 )

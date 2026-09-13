@@ -163,12 +163,13 @@ class MyDuitApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
+    final accent = themeProvider.accentColor;
 
     return MaterialApp(
       title: 'MyDuit',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme(),
-      darkTheme: AppTheme.darkTheme(),
+      theme: AppTheme.lightTheme(primaryAccent: accent.lightColor),
+      darkTheme: AppTheme.darkTheme(primaryAccent: accent.darkColor),
       themeMode: themeProvider.themeMode,
       home: SplashScreen(
         nextScreen: showOnboarding
