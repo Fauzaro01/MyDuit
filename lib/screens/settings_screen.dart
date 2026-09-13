@@ -26,6 +26,7 @@ import 'financial_calendar_screen.dart';
 import 'subscription_screen.dart';
 import 'net_worth_screen.dart';
 import 'financial_advisor_screen.dart';
+import 'financial_calculator_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -241,6 +242,21 @@ class SettingsScreen extends StatelessWidget {
                     context,
                     MaterialPageRoute(
                       builder: (_) => const FinancialAdvisorScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.calculate_rounded,
+                title: 'Kalkulator Finansial',
+                subtitle: 'Simulasi bunga majemuk, pinjaman KPR, dana darurat & FIRE',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const FinancialCalculatorScreen(),
                     ),
                   );
                 },

@@ -4,10 +4,14 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../models/transaction_model.dart';
+import '../providers/template_provider.dart';
+import '../utils/formatters.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/insights_widget.dart';
 import '../widgets/transaction_detail_sheet.dart';
 import 'add_transaction_screen.dart';
+import 'history_screen.dart';
 import 'transfer_screen.dart';
 import 'wallet_screen.dart';
 
@@ -53,6 +57,20 @@ class HomeScreen extends StatelessWidget {
                                 style: theme.textTheme.headlineMedium,
                               ),
                             ],
+                          ),
+                          IconButton.filledTonal(
+                            icon: const Icon(Icons.search_rounded),
+                            tooltip: 'Cari Transaksi',
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const Scaffold(
+                                    body: HistoryScreen(),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       )
@@ -103,6 +121,8 @@ class HomeScreen extends StatelessWidget {
                       .animate()
                       .fadeIn(delay: 200.ms, duration: 400.ms)
                       .slideY(begin: 0.1, end: 0),
+                  const SizedBox(height: 20),
+                  const _QuickTemplateBar(),
                   const SizedBox(height: 24),
                   const InsightsCard(),
                   const SizedBox(height: 24),
@@ -362,6 +382,79 @@ class _WalletChip extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _QuickTemplateBar extends StatelessWidget {
+  const _QuickTemplateBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final templateProvider = context.watch<TemplateProvider>();
+    final templates = templateProvider.templates;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (templates.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.bolt_rounded,
+              size: 16,
+              color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Catat Cepat',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 38,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: templates.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final tpl = templates[index];
+              return ActionChip(
+                avatar: Text(tpl.emoji, style: const TextStyle(fontSize: 15)),
+                label: Text(
+                  '${tpl.name} · ${CurrencyFormatter.format(tpl.amount)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                backgroundColor:
+                    isDark ? AppColors.cardDark : AppColors.cardAltLight,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AddTransactionScreen(
+                        template: tpl,
+                        initialIsIncome: tpl.type == TransactionType.income,
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
