@@ -336,6 +336,63 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 return null;
               },
             ),
+            Builder(
+              builder: (context) {
+                final txProvider = Provider.of<TransactionProvider?>(context);
+                if (txProvider == null || txProvider.transactions.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                final query = _titleController.text.trim().toLowerCase();
+                final suggestions = txProvider.transactions
+                    .where((t) => t.type == _type)
+                    .map((t) => t.title.trim())
+                    .where((t) =>
+                        t.isNotEmpty &&
+                        (query.isEmpty ||
+                            (t.toLowerCase().contains(query) &&
+                                t.toLowerCase() != query)))
+                    .toSet()
+                    .take(5)
+                    .toList();
+
+                if (suggestions.isEmpty) return const SizedBox.shrink();
+
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.history_rounded,
+                          size: 14,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(width: 6),
+                        ...suggestions.map(
+                          (s) => Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: ActionChip(
+                              label: Text(
+                                s,
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              onPressed: () {
+                                _titleController.text = s;
+                                _onTitleChanged(s);
+                                setState(() {});
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 20),
 
             // Category

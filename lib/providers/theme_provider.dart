@@ -69,12 +69,14 @@ class ThemeProvider extends ChangeNotifier {
   static const String _privacyKey = 'incognito_privacy_mode';
   static const String _hapticsKey = 'enable_haptics_feedback';
   static const String _amoledKey = 'enable_amoled_black_mode';
+  static const String _fontScaleKey = 'app_font_scale';
 
   ThemeMode _themeMode = ThemeMode.system;
   AppAccentColor _accentColor = AppAccentColor.emerald;
   bool _isPrivacyMode = false;
   bool _isHapticsEnabled = true;
   bool _isAmoledMode = false;
+  double _fontScale = 1.0;
 
   ThemeMode get themeMode => _themeMode;
   AppAccentColor get accentColor => _accentColor;
@@ -82,6 +84,7 @@ class ThemeProvider extends ChangeNotifier {
   bool get isPrivacyMode => _isPrivacyMode;
   bool get isHapticsEnabled => _isHapticsEnabled;
   bool get isAmoledMode => _isAmoledMode;
+  double get fontScale => _fontScale;
 
   ThemeProvider() {
     _loadSettings();
@@ -98,7 +101,15 @@ class ThemeProvider extends ChangeNotifier {
     _isPrivacyMode = prefs.getBool(_privacyKey) ?? false;
     _isHapticsEnabled = prefs.getBool(_hapticsKey) ?? true;
     _isAmoledMode = prefs.getBool(_amoledKey) ?? false;
+    _fontScale = prefs.getDouble(_fontScaleKey) ?? 1.0;
     notifyListeners();
+  }
+
+  Future<void> setFontScale(double scale) async {
+    _fontScale = scale;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_fontScaleKey, scale);
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {

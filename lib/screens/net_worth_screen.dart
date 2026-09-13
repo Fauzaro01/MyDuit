@@ -174,6 +174,7 @@ class NetWorthScreen extends StatelessWidget {
                       color: AppColors.income,
                     ),
                   ),
+                  onTap: () => _showAssetValuationSheet(context, a, isDark),
                   onLongPress: () => _confirmDeleteAsset(context, a),
                 ),
               );
@@ -350,6 +351,145 @@ class NetWorthScreen extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showAssetValuationSheet(BuildContext context, AssetModel asset, bool isDark) {
+    double annualRate = (asset.type == AssetType.other || asset.type == AssetType.cash)
+        ? -10.0
+        : 8.0;
+    int years = 5;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            final futureVal = asset.estimateValuation(
+              years: years,
+              annualRatePercent: annualRate,
+            );
+            final diff = futureVal - asset.amount;
+            final isGain = diff >= 0;
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(asset.type.emoji, style: const TextStyle(fontSize: 28)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                asset.name,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              Text(
+                                'Simulasi Valuasi & Depresiasi Aset',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.cardAltDark : AppColors.cardAltLight,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Nilai Saat Ini', style: TextStyle(fontSize: 13)),
+                              Text(
+                                CurrencyFormatter.format(asset.amount),
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 16),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Estimasi ($years Tahun Lagi)', style: const TextStyle(fontSize: 13)),
+                              Text(
+                                CurrencyFormatter.format(futureVal),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 16,
+                                  color: isGain ? AppColors.income : AppColors.expense,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              '${isGain ? '+' : ''}${CurrencyFormatter.format(diff)} (${isGain ? '+' : ''}${((futureVal - asset.amount) / (asset.amount > 0 ? asset.amount : 1) * 100).toStringAsFixed(1)}%)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: isGain ? AppColors.income : AppColors.expense,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Laju Perubahan Tahunan: ${annualRate >= 0 ? '+' : ''}${annualRate.toStringAsFixed(0)}% / thn', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                    Slider(
+                      value: annualRate,
+                      min: -50.0,
+                      max: 50.0,
+                      divisions: 100,
+                      label: '${annualRate >= 0 ? '+' : ''}${annualRate.toStringAsFixed(0)}%',
+                      onChanged: (v) => setState(() => annualRate = v),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Penyusutan (-50%)', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        const Text('Netral (0%)', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        const Text('Apresiasi (+50%)', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Text('Jangka Waktu Proyeksi: $years Tahun', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                    Slider(
+                      value: years.toDouble(),
+                      min: 1.0,
+                      max: 20.0,
+                      divisions: 19,
+                      label: '$years Tahun',
+                      onChanged: (v) => setState(() => years = v.toInt()),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
               ),
             );
           },

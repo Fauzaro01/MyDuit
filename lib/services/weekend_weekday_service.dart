@@ -1,5 +1,17 @@
 import '../models/transaction_model.dart';
 
+class HighestSpendingDay {
+  final DateTime date;
+  final double amount;
+  final int transactionCount;
+
+  HighestSpendingDay({
+    required this.date,
+    required this.amount,
+    required this.transactionCount,
+  });
+}
+
 class WeekendWeekdayStats {
   final double weekdayTotal;
   final double weekendTotal;
@@ -7,6 +19,7 @@ class WeekendWeekdayStats {
   final int weekendCount;
   final double weekdayDailyAvg;
   final double weekendDailyAvg;
+  final HighestSpendingDay? highestDay;
 
   WeekendWeekdayStats({
     required this.weekdayTotal,
@@ -15,6 +28,7 @@ class WeekendWeekdayStats {
     required this.weekendCount,
     required this.weekdayDailyAvg,
     required this.weekendDailyAvg,
+    this.highestDay,
   });
 
   double get total => weekdayTotal + weekendTotal;
@@ -57,6 +71,28 @@ class WeekendWeekdayService {
         ? weekendSum / uniqueWeekendDays.length
         : 0.0;
 
+    // Find highest spending day
+    final Map<String, List<TransactionModel>> dayGroups = {};
+    for (final tx in transactions) {
+      if (tx.type != TransactionType.expense) continue;
+      final key = '${tx.date.year}-${tx.date.month.toString().padLeft(2, '0')}-${tx.date.day.toString().padLeft(2, '0')}';
+      dayGroups.putIfAbsent(key, () => []).add(tx);
+    }
+
+    HighestSpendingDay? highestDay;
+    double maxSpent = 0;
+    dayGroups.forEach((key, list) {
+      final sum = list.fold(0.0, (acc, t) => acc + t.amount);
+      if (sum > maxSpent) {
+        maxSpent = sum;
+        highestDay = HighestSpendingDay(
+          date: list.first.date,
+          amount: sum,
+          transactionCount: list.length,
+        );
+      }
+    });
+
     return WeekendWeekdayStats(
       weekdayTotal: weekdaySum,
       weekendTotal: weekendSum,
@@ -64,6 +100,7 @@ class WeekendWeekdayService {
       weekendCount: weekendCount,
       weekdayDailyAvg: weekdayAvg,
       weekendDailyAvg: weekendAvg,
+      highestDay: highestDay,
     );
   }
 }

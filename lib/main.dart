@@ -174,6 +174,14 @@ class MyDuitApp extends StatelessWidget {
         isAmoled: themeProvider.isAmoledMode,
       ),
       themeMode: themeProvider.themeMode,
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(themeProvider.fontScale),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       home: SplashScreen(
         nextScreen: showOnboarding
             ? const OnboardingScreen()

@@ -64,5 +64,19 @@ void main() {
       expect(res.yearsToRetirement, 25);
       expect(res.monthlySavingsNeeded, greaterThan(0));
     });
+
+    test('calculateInflation calculates purchasing power erosion and future cost', () {
+      final res = FinancialCalculatorService.calculateInflation(
+        amount: 100000000,
+        annualInflationRatePercent: 5.0,
+        years: 10,
+      );
+
+      expect(res.originalAmount, 100000000);
+      expect(res.futurePurchasingPower, lessThan(100000000));
+      expect(res.equivalentFutureAmount, greaterThan(100000000));
+      expect(res.purchasingPowerLossPercent, greaterThan(30));
+      expect(res.years, 10);
+    });
   });
 }
