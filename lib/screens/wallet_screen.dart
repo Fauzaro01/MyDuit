@@ -5,6 +5,7 @@ import '../config/app_theme.dart';
 import '../models/wallet_model.dart';
 import '../providers/wallet_provider.dart';
 import '../utils/formatters.dart';
+import '../widgets/emoji_picker_sheet.dart';
 import 'transfer_screen.dart';
 
 class WalletScreen extends StatelessWidget {
@@ -296,6 +297,25 @@ class WalletScreen extends StatelessWidget {
                           ),
                         );
                       }).toList(),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      icon: const Icon(Icons.grid_view_rounded, size: 16),
+                      label: const Text('Koleksi Emoji Lainnya...'),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () async {
+                        final picked = await EmojiPickerSheet.show(
+                          context,
+                          initialEmoji: selectedEmoji,
+                        );
+                        if (picked != null) {
+                          setState(() => selectedEmoji = picked);
+                        }
+                      },
                     ),
                     const SizedBox(height: 20),
 

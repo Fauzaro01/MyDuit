@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   // Primary palette — teal/emerald tones
+  static const Color primary = primaryLight;
   static const Color primaryLight = Color(0xFF0D9373);
   static const Color primaryDark = Color(0xFF4AEDC4);
 

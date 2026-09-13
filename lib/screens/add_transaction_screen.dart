@@ -11,6 +11,7 @@ import '../providers/custom_category_provider.dart';
 import '../providers/tag_provider.dart';
 import '../providers/template_provider.dart';
 import '../services/receipt_parser_service.dart';
+import '../services/auto_categorize_service.dart';
 import '../utils/formatters.dart';
 
 class AddTransactionScreen extends StatefulWidget {
@@ -112,6 +113,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     _noteController.dispose();
     _tagInputController.dispose();
     super.dispose();
+  }
+
+  void _onTitleChanged(String value) {
+    if (_isEditing) return;
+    final suggestion = AutoCategorizeService.suggest(value);
+    if (suggestion != null) {
+      setState(() {
+        _type = suggestion.type;
+        _category = suggestion.category;
+        _customCategoryId = null;
+      });
+    }
   }
 
   List<TransactionCategory> get _availableCategories {
@@ -245,6 +258,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             TextFormField(
               controller: _titleController,
               textCapitalization: TextCapitalization.sentences,
+              onChanged: _onTitleChanged,
               decoration: const InputDecoration(
                 hintText: 'Contoh: Gaji Bulanan',
               ),

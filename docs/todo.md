@@ -68,5 +68,11 @@ Daftar tugas teridentifikasi dari analisis kode MyDuit:
 - [x] **Task 64**: Tambahkan sistem pengingat otomatis tanggal jatuh tempo langganan & pembayaran hutang di `NotificationService`.
 - [x] **Task 65**: Implementasi `SpendingAnomalyService` untuk deteksi lonjakan transaksi tidak wajar dan peningkatan kategori belanja pada `InsightsCard`.
 - [x] **Task 66**: Implementasi suite Kalkulator Finansial (`FinancialCalculatorService` & `FinancialCalculatorScreen`) mencakup Bunga Majemuk, Simulasi Pinjaman/KPR, Dana Darurat, dan Pensiun/FIRE.
+- [x] **Task 67**: Implementasi `EmojiPickerSheet` modal terkategori (Keuangan, Makanan, Transport, Belanja, Tagihan, Hiburan, Simbol) untuk dompet, kategori kustom, dan target tabungan.
+- [x] **Task 68**: Implementasi `AutoCategorizeService` untuk deteksi otomatis kategori dan tipe pengeluaran/pemasukan secara real-time berdasarkan kata kunci transaksi Indonesia.
+- [x] **Task 69**: Modernisasi otentikasi biometrik sidik jari & wajah pada `AppLockProvider` dengan `biometricOnly: true` dan fallback haptic.
+- [x] **Task 70**: Implementasi seksi Analisis Tag (`_TagAnalyticsSection`) pada `StatisticsScreen` lengkap dengan ranking nominal, persentase, dan bottom sheet rincian transaksi per tag.
+- [x] **Task 71**: Implementasi indikator peringatan visual progres anggaran (`80% Waspada`, `90% Kritis`, `⛔ Melebihi Batas`) pada kartu ringkasan dan ubin kategori di `BudgetScreen`.
+- [x] **Task 72**: Implementasi badge Kecepatan Belanja Harian (Daily Spend Pace / Burn Rate) `🔥 Rp X/hari` pada `BalanceCard`.
 
 

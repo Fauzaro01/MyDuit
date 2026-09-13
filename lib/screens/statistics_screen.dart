@@ -144,6 +144,107 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
+  void _showTagTransactionsSheet(
+    BuildContext context,
+    String tag,
+    List<TransactionModel> transactions,
+  ) {
+    final provider = context.read<TransactionProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final totalAmount = transactions.fold(0.0, (sum, t) => sum + t.amount);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(ctx).size.height * 0.75,
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Text('🏷️', style: TextStyle(fontSize: 22)),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '#$tag',
+                        style: Theme.of(ctx).textTheme.titleLarge,
+                      ),
+                      Text(
+                        '${transactions.length} transaksi · ${CurrencyFormatter.format(totalAmount)}',
+                        style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                              fontSize: 12,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            Expanded(
+              child: transactions.isEmpty
+                  ? const EmptyState(message: 'Tidak ada transaksi')
+                  : ListView.separated(
+                      padding: const EdgeInsets.only(top: 8, bottom: 16),
+                      itemCount: transactions.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (ctx, i) {
+                        final tx = transactions[i];
+                        return TransactionTile(
+                          transaction: tx,
+                          onDismissed: () => provider.deleteTransaction(tx.id),
+                          onTap: () => showTransactionDetail(
+                            context,
+                            tx,
+                            onDeleted: () => provider.deleteTransaction(tx.id),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TransactionProvider>();
@@ -380,6 +481,29 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     ),
                     const SizedBox(height: 16),
                     _WeeklySummary(showExpense: _showExpense, isDark: isDark),
+                    const SizedBox(height: 24),
+
+                    // Tag Analytics
+                    Text('Analisis Tag', style: theme.textTheme.titleLarge),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Pengeluaran & pemasukan berdasarkan #tag',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _TagAnalyticsSection(
+                      transactions: targetTransactions,
+                      showExpense: _showExpense,
+                      totalAmount: totalAmount,
+                      isDark: isDark,
+                      onTapTag: (tag, txs) =>
+                          _showTagTransactionsSheet(context, tag, txs),
+                    ),
                   ],
                   SizedBox(
                     height: 100 + MediaQuery.paddingOf(context).bottom,
@@ -1072,5 +1196,177 @@ class _WeeklySummaryState extends State<_WeeklySummary> {
         }),
       ),
     ).animate().fadeIn(delay: 600.ms, duration: 500.ms);
+  }
+}
+
+// ── Tag Analytics Section ─────────────────────────────────────
+class _TagAnalyticsSection extends StatelessWidget {
+  final List<TransactionModel> transactions;
+  final bool showExpense;
+  final double totalAmount;
+  final bool isDark;
+  final void Function(String tag, List<TransactionModel> transactions) onTapTag;
+
+  const _TagAnalyticsSection({
+    required this.transactions,
+    required this.showExpense,
+    required this.totalAmount,
+    required this.isDark,
+    required this.onTapTag,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = showExpense ? AppColors.expense : AppColors.income;
+
+    // Group transactions by tag
+    final Map<String, List<TransactionModel>> tagMap = {};
+    for (final tx in transactions) {
+      for (final tag in tx.tags) {
+        final cleanTag = tag.trim().toLowerCase();
+        if (cleanTag.isNotEmpty) {
+          tagMap.putIfAbsent(cleanTag, () => []).add(tx);
+        }
+      }
+    }
+
+    if (tagMap.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.cardDark : AppColors.cardLight,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            const Text('🏷️', style: TextStyle(fontSize: 24)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Belum ada tag pada transaksi bulan ini. Tambahkan #tag saat mencatat transaksi untuk melihat analisis mendalam.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontSize: 12,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ).animate().fadeIn(delay: 700.ms, duration: 400.ms);
+    }
+
+    // Convert to list and sort by total amount
+    final tagEntries = tagMap.entries.map((e) {
+      final tagTotal = e.value.fold(0.0, (sum, t) => sum + t.amount);
+      return MapEntry(e.key, {'total': tagTotal, 'txs': e.value});
+    }).toList()
+      ..sort((a, b) => (b.value['total'] as double).compareTo(a.value['total'] as double));
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.cardDark : AppColors.cardLight,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: tagEntries.asMap().entries.map((entry) {
+          final index = entry.key;
+          final tag = entry.value.key;
+          final tagTotal = entry.value.value['total'] as double;
+          final tagTxs = entry.value.value['txs'] as List<TransactionModel>;
+          final pct = totalAmount > 0 ? (tagTotal / totalAmount * 100) : 0.0;
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: index == tagEntries.length - 1 ? 0 : 12,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => onTapTag(tag, tagTxs),
+                borderRadius: BorderRadius.circular(10),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 4,
+                    horizontal: 4,
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '#$tag',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primaryLight,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '(${tagTxs.length} tx)',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            CurrencyFormatter.format(tagTotal),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: color,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${pct.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: (pct / 100).clamp(0.0, 1.0),
+                          backgroundColor: color.withValues(alpha: 0.1),
+                          valueColor: AlwaysStoppedAnimation(color),
+                          minHeight: 5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    ).animate().fadeIn(delay: 700.ms, duration: 400.ms);
   }
 }

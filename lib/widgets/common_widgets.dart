@@ -17,6 +17,15 @@ class BalanceCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = isDark ? AppColors.primaryDark : AppColors.primaryLight;
 
+    final now = DateTime.now();
+    final isCurrentMonth =
+        provider.selectedYear == now.year && provider.selectedMonth == now.month;
+    final daysInMonth =
+        DateTime(provider.selectedYear, provider.selectedMonth + 1, 0).day;
+    final daysElapsed =
+        isCurrentMonth ? now.day.clamp(1, daysInMonth) : daysInMonth;
+    final dailyPace = provider.totalExpense / daysElapsed;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -27,15 +36,46 @@ class BalanceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Total Saldo',
-            style: TextStyle(
-              color: isDark
-                  ? AppColors.surfaceDark.withValues(alpha: 0.7)
-                  : Colors.white.withValues(alpha: 0.8),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Total Saldo',
+                style: TextStyle(
+                  color: isDark
+                      ? AppColors.surfaceDark.withValues(alpha: 0.7)
+                      : Colors.white.withValues(alpha: 0.8),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              if (provider.totalExpense > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.black.withValues(alpha: 0.25)
+                        : Colors.white.withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('🔥', style: TextStyle(fontSize: 11)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${CurrencyFormatter.formatCompact(dailyPace)}/hari',
+                        style: TextStyle(
+                          color: isDark ? AppColors.surfaceDark : Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 8),
           Text(
