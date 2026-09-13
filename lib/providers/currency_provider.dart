@@ -13,6 +13,10 @@ class CurrencyProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   DateTime? get lastRefreshed => _lastRefreshed;
 
+  bool get isRateStale =>
+      _lastRefreshed == null ||
+      DateTime.now().difference(_lastRefreshed!).inHours >= 24;
+
   List<CurrencyModel> get availableCurrencies {
     return CurrencyModel.defaultCurrencies.map((c) {
       final currentRate = _ratesToIdr[c.code] ?? c.rateToIdr;
@@ -28,9 +32,7 @@ class CurrencyProvider extends ChangeNotifier {
 
   Future<void> init() async {
     _ratesToIdr = await CurrencyRateService.loadCachedRates();
-    if (_ratesToIdr.isNotEmpty) {
-      _lastRefreshed = DateTime.now();
-    }
+    _lastRefreshed = await CurrencyRateService.getLastUpdatedTime();
     notifyListeners();
     // Silently refresh in background
     refreshRates();

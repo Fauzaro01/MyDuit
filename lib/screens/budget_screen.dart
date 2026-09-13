@@ -7,6 +7,7 @@ import '../models/budget_model.dart';
 import '../models/transaction_model.dart';
 import '../providers/custom_category_provider.dart';
 import '../providers/transaction_provider.dart';
+import '../services/spending_velocity_service.dart';
 import '../utils/formatters.dart';
 import '../widgets/common_widgets.dart';
 
@@ -107,6 +108,11 @@ class BudgetScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Anggaran'),
         actions: [
+          IconButton(
+            tooltip: 'Alokasi Cepat 50-30-20',
+            icon: const Icon(Icons.pie_chart_outline_rounded),
+            onPressed: () => _showQuickSplit503020(context, provider),
+          ),
           IconButton(
             icon: const Icon(Icons.info_outline_rounded),
             onPressed: () => _showInfoDialog(context),
@@ -253,6 +259,16 @@ class BudgetScreen extends StatelessWidget {
                       ],
                     ),
                   ).animate().fadeIn(duration: 400.ms),
+                  if (totalBudget > 0) ...[
+                    const SizedBox(height: 16),
+                    _SpendingVelocityCard(
+                      totalBudget: totalBudget,
+                      totalSpent: totalSpent,
+                      year: provider.selectedYear,
+                      month: provider.selectedMonth,
+                      isDark: isDark,
+                    ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
+                  ],
                   const SizedBox(height: 20),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -327,6 +343,141 @@ class BudgetScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  void _showQuickSplit503020(BuildContext context, TransactionProvider provider) {
+    final controller = TextEditingController(
+      text: provider.totalIncome > 0
+          ? (CurrencyInputService.isFormatted
+              ? RupiahInputFormatter.formatNumber(provider.totalIncome)
+              : provider.totalIncome.toStringAsFixed(0))
+          : '',
+    );
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            24,
+            20,
+            24 + MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.income.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.pie_chart_rounded,
+                      color: AppColors.income,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Alokasi Cepat 50-30-20',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Bagi anggaran otomatis berdasarkan aturan keuangan populer: '
+                '50% Kebutuhan Pokok, 30% Keinginan, dan 20% Tabungan/Investasi.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                inputFormatters: CurrencyInputService.isFormatted
+                    ? [RupiahInputFormatter()]
+                    : [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(
+                  prefixText: 'Rp ',
+                  labelText: 'Target Pemasukan / Dasar Anggaran',
+                  hintText: 'Misal: 10.000.000',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                autofocus: true,
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    final income = RupiahInputFormatter.parse(controller.text);
+                    if (income <= 0) return;
+
+                    HapticFeedback.mediumImpact();
+                    final allocations =
+                        SpendingVelocityService.generate50_30_20Envelopes(income);
+
+                    for (final entry in allocations.entries) {
+                      final existing = provider.budgets.firstWhere(
+                        (b) =>
+                            b.category == entry.key &&
+                            b.customCategoryId == null,
+                        orElse: () => BudgetModel(
+                          category: entry.key,
+                          monthlyLimit: 0,
+                          year: provider.selectedYear,
+                          month: provider.selectedMonth,
+                        ),
+                      );
+
+                      provider.setBudget(
+                        existing.copyWith(
+                          monthlyLimit: entry.value,
+                          year: provider.selectedYear,
+                          month: provider.selectedMonth,
+                        ),
+                      );
+                    }
+
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Anggaran 50-30-20 berhasil dialokasikan! 🎯'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.auto_fix_high_rounded),
+                  label: const Text('Terapkan Alokasi Otomatis'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.income,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -640,6 +791,157 @@ class _BudgetCategoryTile extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SpendingVelocityCard extends StatelessWidget {
+  final double totalBudget;
+  final double totalSpent;
+  final int year;
+  final int month;
+  final bool isDark;
+
+  const _SpendingVelocityCard({
+    required this.totalBudget,
+    required this.totalSpent,
+    required this.year,
+    required this.month,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final velocity = SpendingVelocityService.calculateVelocity(
+      totalBudget: totalBudget,
+      totalSpent: totalSpent,
+      year: year,
+      month: month,
+    );
+
+    Color statusColor;
+    IconData statusIcon;
+    switch (velocity.status) {
+      case SpendingPaceStatus.underPace:
+        statusColor = AppColors.income;
+        statusIcon = Icons.speed_rounded;
+        break;
+      case SpendingPaceStatus.onTrack:
+        statusColor = Colors.blueAccent;
+        statusIcon = Icons.check_circle_outline_rounded;
+        break;
+      case SpendingPaceStatus.fastPace:
+        statusColor = const Color(0xFFF59E0B);
+        statusIcon = Icons.warning_amber_rounded;
+        break;
+      case SpendingPaceStatus.critical:
+        statusColor = AppColors.expense;
+        statusIcon = Icons.error_outline_rounded;
+        break;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.cardDark : AppColors.cardLight,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: statusColor.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(statusIcon, color: statusColor, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Spending Velocity & Burn Pace',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: statusColor,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'Hari ke-${velocity.daysElapsed} / ${velocity.daysInMonth}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            velocity.statusMessage,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Batas Harian Ideal', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${CurrencyFormatter.formatCompact(velocity.dailyBurnTarget)}/hari',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Text('Rata-rata Terpakai', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${CurrencyFormatter.formatCompact(velocity.actualDailyBurn)}/hari',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: velocity.actualDailyBurn > velocity.dailyBurnTarget
+                          ? AppColors.expense
+                          : AppColors.income,
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text('Proyeksi Akhir Bulan', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  const SizedBox(height: 2),
+                  Text(
+                    CurrencyFormatter.formatCompact(velocity.projectedMonthEndSpend),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: velocity.projectedMonthEndSpend > velocity.totalBudget
+                          ? AppColors.expense
+                          : AppColors.income,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

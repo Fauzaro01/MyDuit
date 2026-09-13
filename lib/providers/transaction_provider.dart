@@ -146,6 +146,13 @@ class TransactionProvider extends ChangeNotifier {
     _walletProvider?.refreshBalances();
   }
 
+  Future<void> togglePin(String id) async {
+    final tx = _transactions.where((t) => t.id == id).firstOrNull;
+    if (tx == null) return;
+    final updated = tx.copyWith(isPinned: !tx.isPinned);
+    await updateTransaction(updated);
+  }
+
   // ── Budget CRUD ──
   Future<void> setBudget(BudgetModel budget) async {
     await _dbService.upsertBudget(budget);

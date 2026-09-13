@@ -41,6 +41,7 @@ void main() {
             walletId TEXT,
             customCategoryId TEXT,
             tags TEXT,
+            isPinned INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (walletId) REFERENCES wallets(id)
           )
         ''');
@@ -62,6 +63,7 @@ void main() {
             fromWalletId TEXT NOT NULL,
             toWalletId TEXT NOT NULL,
             amount REAL NOT NULL,
+            adminFee REAL NOT NULL DEFAULT 0,
             note TEXT,
             date INTEGER NOT NULL,
             FOREIGN KEY (fromWalletId) REFERENCES wallets(id),

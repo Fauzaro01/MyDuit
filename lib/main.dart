@@ -169,7 +169,10 @@ class MyDuitApp extends StatelessWidget {
       title: 'MyDuit',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme(primaryAccent: accent.lightColor),
-      darkTheme: AppTheme.darkTheme(primaryAccent: accent.darkColor),
+      darkTheme: AppTheme.darkTheme(
+        primaryAccent: accent.darkColor,
+        isAmoled: themeProvider.isAmoledMode,
+      ),
       themeMode: themeProvider.themeMode,
       home: SplashScreen(
         nextScreen: showOnboarding

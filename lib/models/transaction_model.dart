@@ -105,6 +105,7 @@ class TransactionModel {
   final String? walletId;
   final String? customCategoryId;
   final List<String> tags;
+  final bool isPinned;
 
   TransactionModel({
     String? id,
@@ -117,6 +118,7 @@ class TransactionModel {
     this.walletId,
     this.customCategoryId,
     this.tags = const [],
+    this.isPinned = false,
   }) : id = id ?? const Uuid().v4();
 
   Map<String, dynamic> toMap() {
@@ -131,6 +133,7 @@ class TransactionModel {
       'walletId': walletId,
       'customCategoryId': customCategoryId,
       'tags': tags.isNotEmpty ? tags.join(',') : null,
+      'isPinned': isPinned ? 1 : 0,
     };
   }
 
@@ -151,6 +154,7 @@ class TransactionModel {
       walletId: map['walletId'] as String?,
       customCategoryId: map['customCategoryId'] as String?,
       tags: parsedTags,
+      isPinned: (map['isPinned'] as int? ?? 0) == 1,
     );
   }
 
@@ -165,6 +169,7 @@ class TransactionModel {
     String? walletId,
     String? customCategoryId,
     List<String>? tags,
+    bool? isPinned,
   }) {
     return TransactionModel(
       id: id ?? this.id,
@@ -177,6 +182,7 @@ class TransactionModel {
       walletId: walletId ?? this.walletId,
       customCategoryId: customCategoryId ?? this.customCategoryId,
       tags: tags ?? this.tags,
+      isPinned: isPinned ?? this.isPinned,
     );
   }
 }

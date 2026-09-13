@@ -19,6 +19,7 @@ class TransferScreen extends StatefulWidget {
 class _TransferScreenState extends State<TransferScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
+  final _adminFeeController = TextEditingController();
   final _noteController = TextEditingController();
 
   WalletModel? _fromWallet;
@@ -43,6 +44,7 @@ class _TransferScreenState extends State<TransferScreen> {
   @override
   void dispose() {
     _amountController.dispose();
+    _adminFeeController.dispose();
     _noteController.dispose();
     super.dispose();
   }
@@ -195,6 +197,34 @@ class _TransferScreenState extends State<TransferScreen> {
             ),
             const SizedBox(height: 20),
 
+            // Admin Fee (Optional)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Biaya Admin (opsional)', style: theme.textTheme.labelLarge),
+                Row(
+                  children: [
+                    _buildAdminFeeChip(2500, 'BI-Fast (2.5k)', isDark),
+                    const SizedBox(width: 6),
+                    _buildAdminFeeChip(6500, 'Online (6.5k)', isDark),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _adminFeeController,
+              keyboardType: TextInputType.number,
+              inputFormatters: CurrencyInputService.isFormatted
+                  ? [RupiahInputFormatter()]
+                  : [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                prefixText: 'Rp ',
+                hintText: '0 (Gratis)',
+              ),
+            ),
+            const SizedBox(height: 20),
+
             // Date
             Text('Tanggal', style: theme.textTheme.labelLarge),
             const SizedBox(height: 8),
@@ -266,6 +296,31 @@ class _TransferScreenState extends State<TransferScreen> {
     );
   }
 
+  Widget _buildAdminFeeChip(double fee, String label, bool isDark) {
+    return InkWell(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() {
+          _adminFeeController.text = CurrencyInputService.isFormatted
+              ? RupiahInputFormatter.formatNumber(fee)
+              : fee.toStringAsFixed(0);
+        });
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.cardAltDark : AppColors.cardAltLight,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
   Future<void> _selectDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -312,10 +367,14 @@ class _TransferScreenState extends State<TransferScreen> {
 
     try {
       final amount = RupiahInputFormatter.parse(_amountController.text);
+      final adminFee = _adminFeeController.text.trim().isNotEmpty
+          ? RupiahInputFormatter.parse(_adminFeeController.text)
+          : 0.0;
       final transfer = TransferModel(
         fromWalletId: _fromWallet!.id,
         toWalletId: _toWallet!.id,
         amount: amount,
+        adminFee: adminFee,
         note: _noteController.text.trim().isEmpty
             ? null
             : _noteController.text.trim(),

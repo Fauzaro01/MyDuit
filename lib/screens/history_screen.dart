@@ -29,6 +29,117 @@ class _HistoryScreenState extends State<HistoryScreen>
   String? _selectedCategoryName;
   String? _selectedTag;
   DateTimeRange? _selectedDateRange;
+  double? _minAmount;
+  double? _maxAmount;
+
+  void _showAmountFilterDialog(BuildContext context) {
+    final minController = TextEditingController(
+      text: _minAmount != null ? _minAmount!.toInt().toString() : '',
+    );
+    final maxController = TextEditingController(
+      text: _maxAmount != null ? _maxAmount!.toInt().toString() : '',
+    );
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).dividerColor,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Filter Rentang Nominal',
+                    style: Theme.of(ctx).textTheme.titleLarge,
+                  ),
+                  if (_minAmount != null || _maxAmount != null)
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _minAmount = null;
+                          _maxAmount = null;
+                        });
+                        Navigator.pop(ctx);
+                      },
+                      child: const Text('Reset'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: minController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Min (Rp)',
+                        prefixText: 'Rp ',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: maxController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Maks (Rp)',
+                        prefixText: 'Rp ',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    final minVal = double.tryParse(minController.text.trim());
+                    final maxVal = double.tryParse(maxController.text.trim());
+                    setState(() {
+                      _minAmount = minVal;
+                      _maxAmount = maxVal;
+                    });
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Terapkan Filter'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _pickDateRange() async {
     final now = DateTime.now();
@@ -390,6 +501,18 @@ class _HistoryScreenState extends State<HistoryScreen>
                         ),
                         IconButton(
                           icon: Icon(
+                            (_minAmount != null || _maxAmount != null)
+                                ? Icons.payments_rounded
+                                : Icons.payments_outlined,
+                            color: (_minAmount != null || _maxAmount != null)
+                                ? theme.colorScheme.primary
+                                : null,
+                          ),
+                          tooltip: 'Rentang Nominal',
+                          onPressed: () => _showAmountFilterDialog(context),
+                        ),
+                        IconButton(
+                          icon: Icon(
                             hasCategoryFilter
                                 ? Icons.filter_alt_rounded
                                 : Icons.filter_alt_outlined,
@@ -478,6 +601,28 @@ class _HistoryScreenState extends State<HistoryScreen>
                             onDeleted: () {
                               setState(() {
                                 _selectedDateRange = null;
+                              });
+                            },
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                      // Active amount filter chip
+                      if (_minAmount != null || _maxAmount != null)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Chip(
+                            label: Text(
+                              'Nominal: ${_minAmount != null ? CurrencyFormatter.formatCompact(_minAmount!) : '0'} - ${_maxAmount != null ? CurrencyFormatter.formatCompact(_maxAmount!) : '∞'}',
+                            ),
+                            labelStyle: const TextStyle(fontSize: 12, color: Colors.white),
+                            backgroundColor: theme.colorScheme.primary,
+                            deleteIcon: const Icon(Icons.close_rounded, size: 16, color: Colors.white),
+                            onDeleted: () {
+                              setState(() {
+                                _minAmount = null;
+                                _maxAmount = null;
                               });
                             },
                             shape: RoundedRectangleBorder(
@@ -694,6 +839,8 @@ class _HistoryScreenState extends State<HistoryScreen>
                   customCategoryId: _selectedCustomCatId,
                   tag: _selectedTag,
                   dateRange: _selectedDateRange,
+                  minAmount: _minAmount,
+                  maxAmount: _maxAmount,
                   searchQuery: _searchController.text.trim(),
                 ),
                 _TransactionList(
@@ -703,6 +850,8 @@ class _HistoryScreenState extends State<HistoryScreen>
                   customCategoryId: _selectedCustomCatId,
                   tag: _selectedTag,
                   dateRange: _selectedDateRange,
+                  minAmount: _minAmount,
+                  maxAmount: _maxAmount,
                   searchQuery: _searchController.text.trim(),
                 ),
                 _TransactionList(
@@ -712,6 +861,8 @@ class _HistoryScreenState extends State<HistoryScreen>
                   customCategoryId: _selectedCustomCatId,
                   tag: _selectedTag,
                   dateRange: _selectedDateRange,
+                  minAmount: _minAmount,
+                  maxAmount: _maxAmount,
                   searchQuery: _searchController.text.trim(),
                 ),
               ],
@@ -730,6 +881,8 @@ class _TransactionList extends StatelessWidget {
   final String? customCategoryId;
   final String? tag;
   final DateTimeRange? dateRange;
+  final double? minAmount;
+  final double? maxAmount;
   final String searchQuery;
 
   const _TransactionList({
@@ -739,6 +892,8 @@ class _TransactionList extends StatelessWidget {
     this.customCategoryId,
     this.tag,
     this.dateRange,
+    this.minAmount,
+    this.maxAmount,
     this.searchQuery = '',
   });
 
@@ -799,6 +954,14 @@ class _TransactionList extends StatelessWidget {
     // Filter by tag if selected
     if (tag != null) {
       transactions = transactions.where((t) => t.tags.contains(tag)).toList();
+    }
+
+    // Filter by amount range if selected
+    if (minAmount != null) {
+      transactions = transactions.where((t) => t.amount >= minAmount!).toList();
+    }
+    if (maxAmount != null) {
+      transactions = transactions.where((t) => t.amount <= maxAmount!).toList();
     }
 
     if (provider.isLoading) {

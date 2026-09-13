@@ -5,6 +5,7 @@ class TransferModel {
   final String fromWalletId;
   final String toWalletId;
   final double amount;
+  final double adminFee;
   final String? note;
   final DateTime date;
 
@@ -13,10 +14,13 @@ class TransferModel {
     required this.fromWalletId,
     required this.toWalletId,
     required this.amount,
+    this.adminFee = 0.0,
     this.note,
     DateTime? date,
   }) : id = id ?? const Uuid().v4(),
        date = date ?? DateTime.now();
+
+  double get totalDeduction => amount + adminFee;
 
   Map<String, dynamic> toMap() {
     return {
@@ -24,6 +28,7 @@ class TransferModel {
       'fromWalletId': fromWalletId,
       'toWalletId': toWalletId,
       'amount': amount,
+      'adminFee': adminFee,
       'note': note,
       'date': date.millisecondsSinceEpoch,
     };
@@ -35,6 +40,7 @@ class TransferModel {
       fromWalletId: map['fromWalletId'] as String,
       toWalletId: map['toWalletId'] as String,
       amount: (map['amount'] as num).toDouble(),
+      adminFee: (map['adminFee'] as num? ?? 0.0).toDouble(),
       note: map['note'] as String?,
       date: DateTime.fromMillisecondsSinceEpoch(map['date'] as int),
     );
@@ -45,6 +51,7 @@ class TransferModel {
     String? fromWalletId,
     String? toWalletId,
     double? amount,
+    double? adminFee,
     String? note,
     DateTime? date,
   }) {
@@ -53,6 +60,7 @@ class TransferModel {
       fromWalletId: fromWalletId ?? this.fromWalletId,
       toWalletId: toWalletId ?? this.toWalletId,
       amount: amount ?? this.amount,
+      adminFee: adminFee ?? this.adminFee,
       note: note ?? this.note,
       date: date ?? this.date,
     );

@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:share_plus/share_plus.dart';
 import '../config/app_theme.dart';
 import '../models/transaction_model.dart';
 import '../providers/custom_category_provider.dart';
 import '../providers/transaction_provider.dart';
+import '../services/weekend_weekday_service.dart';
 import '../utils/formatters.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/transaction_detail_sheet.dart';
@@ -321,7 +323,34 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Statistik', style: theme.textTheme.headlineMedium),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Statistik', style: theme.textTheme.headlineMedium),
+                      IconButton.filledTonal(
+                        icon: const Icon(Icons.share_rounded, size: 20),
+                        tooltip: 'Bagikan Rekap Statistik',
+                        onPressed: () {
+                          final netBalance = provider.totalIncome - provider.totalExpense;
+                          final savingsRate = provider.totalIncome > 0
+                              ? ((provider.totalIncome - provider.totalExpense) / provider.totalIncome * 100).clamp(0, 100)
+                              : 0.0;
+
+                          final shareText = '''
+📊 Ringkasan Keuangan MyDuit (${DateFormatter.monthYear(provider.selectedYear, provider.selectedMonth)})
+
+💰 Pemasukan: ${CurrencyFormatter.format(provider.totalIncome)}
+💸 Pengeluaran: ${CurrencyFormatter.format(provider.totalExpense)}
+📈 Saldo Bersih: ${CurrencyFormatter.format(netBalance)}
+🎯 Rasio Tabungan: ${savingsRate.toStringAsFixed(1)}%
+
+Kelola dan pantau keuanganmu lebih cerdas dengan aplikasi MyDuit! 🚀
+''';
+                          Share.share(shareText.trim(), subject: 'Rekap Keuangan MyDuit');
+                        },
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                   const MonthSelector(),
                   const SizedBox(height: 20),
@@ -503,6 +532,25 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       isDark: isDark,
                       onTapTag: (tag, txs) =>
                           _showTagTransactionsSheet(context, tag, txs),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Weekend vs Weekday Spending Analysis
+                    Text('Hari Kerja vs Akhir Pekan', style: theme.textTheme.titleLarge),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Pola perbandingan pengeluaran hari kerja (Sen-Jum) & akhir pekan (Sab-Min)',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _WeekendWeekdayAnalysisCard(
+                      transactions: provider.expenseTransactions,
+                      isDark: isDark,
                     ),
                   ],
                   SizedBox(
@@ -1370,3 +1418,156 @@ class _TagAnalyticsSection extends StatelessWidget {
     ).animate().fadeIn(delay: 700.ms, duration: 400.ms);
   }
 }
+
+// ── Weekend vs Weekday Analysis Card ────────────────────────
+class _WeekendWeekdayAnalysisCard extends StatelessWidget {
+  final List<TransactionModel> transactions;
+  final bool isDark;
+
+  const _WeekendWeekdayAnalysisCard({
+    required this.transactions,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final stats = WeekendWeekdayService.analyzeSpending(transactions);
+
+    if (stats.total == 0) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.cardDark : AppColors.cardLight,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          'Belum ada data pengeluaran',
+          style: theme.textTheme.bodyMedium,
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.cardDark : AppColors.cardLight,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('💼', style: TextStyle(fontSize: 16)),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Hari Kerja (Sen-Jum)',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      CurrencyFormatter.format(stats.weekdayTotal),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primaryLight,
+                      ),
+                    ),
+                    Text(
+                      'Rata-rata: ${CurrencyFormatter.formatCompact(stats.weekdayDailyAvg)}/hari',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '${(stats.weekdayRatio * 100).toStringAsFixed(0)}%',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primaryLight,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              height: 8,
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: (stats.weekdayRatio * 100).round().clamp(1, 99),
+                    child: Container(color: AppColors.primaryLight),
+                  ),
+                  Expanded(
+                    flex: (stats.weekendRatio * 100).round().clamp(1, 99),
+                    child: Container(color: Colors.amber.shade700),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('🏖️', style: TextStyle(fontSize: 16)),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Akhir Pekan (Sab-Min)',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      CurrencyFormatter.format(stats.weekendTotal),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.amber.shade700,
+                      ),
+                    ),
+                    Text(
+                      'Rata-rata: ${CurrencyFormatter.formatCompact(stats.weekendDailyAvg)}/hari',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '${(stats.weekendRatio * 100).toStringAsFixed(0)}%',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.amber.shade700,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ).animate().fadeIn(delay: 750.ms, duration: 400.ms);
+  }
+}
+

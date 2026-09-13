@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../models/debt_model.dart';
+import '../models/debt_payment_model.dart';
 import '../models/transaction_model.dart';
 import '../providers/debt_provider.dart';
 import '../providers/transaction_provider.dart';
@@ -717,12 +718,28 @@ class _DebtTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () => _showPaymentHistory(context, debt, isDark),
+                  icon: const Icon(Icons.history_rounded, size: 20),
+                  tooltip: 'Riwayat Cicilan',
+                ),
                 PopupMenuButton<String>(
                   onSelected: (val) {
+                    if (val == 'history') _showPaymentHistory(context, debt, isDark);
                     if (val == 'edit') onEdit?.call();
                     if (val == 'delete') onDelete();
                   },
                   itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'history',
+                      child: Row(
+                        children: [
+                          Icon(Icons.history_rounded, size: 18),
+                          SizedBox(width: 8),
+                          Text('Riwayat Pembayaran'),
+                        ],
+                      ),
+                    ),
                     if (onEdit != null)
                       const PopupMenuItem(value: 'edit', child: Text('Edit')),
                     const PopupMenuItem(value: 'delete', child: Text('Hapus')),
@@ -732,6 +749,143 @@ class _DebtTile extends StatelessWidget {
               ],
             ),
           ],
+          if (debt.isSettled) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _showPaymentHistory(context, debt, isDark),
+                icon: const Icon(Icons.history_rounded, size: 16),
+                label: const Text('Lihat Riwayat Cicilan', style: TextStyle(fontSize: 12)),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static void _showPaymentHistory(
+    BuildContext context,
+    DebtModel debt,
+    bool isDark,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _DebtHistorySheet(debt: debt, isDark: isDark),
+    );
+  }
+}
+
+// ── Debt Payment History Sheet ──────────────────────────────
+class _DebtHistorySheet extends StatelessWidget {
+  final DebtModel debt;
+  final bool isDark;
+
+  const _DebtHistorySheet({required this.debt, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final debtProvider = context.watch<DebtProvider>();
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.75,
+      ),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        20 + MediaQuery.paddingOf(context).bottom,
+      ),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Text(debt.type.emoji, style: const TextStyle(fontSize: 22)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Riwayat: ${debt.personName}',
+                  style: theme.textTheme.titleLarge,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Total: ${CurrencyFormatter.format(debt.amount)} · Terbayar: ${CurrencyFormatter.format(debt.paidAmount)}',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: FutureBuilder<List<DebtPaymentModel>>(
+              future: debtProvider.getPaymentsForDebt(debt.id),
+              builder: (ctx, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final payments = snapshot.data ?? [];
+                if (payments.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'Belum ada riwayat cicilan',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  itemCount: payments.length,
+                  separatorBuilder: (ctx, index) => const Divider(height: 1),
+                  itemBuilder: (ctx, idx) {
+                    final p = payments[idx];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        radius: 18,
+                        backgroundColor: AppColors.income.withValues(alpha: 0.15),
+                        child: const Icon(
+                          Icons.check_rounded,
+                          size: 18,
+                          color: AppColors.income,
+                        ),
+                      ),
+                      title: Text(
+                        CurrencyFormatter.format(p.amount),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(
+                        p.note != null && p.note!.isNotEmpty
+                            ? '${DateFormatter.fullDate(p.date)} · ${p.note}'
+                            : DateFormatter.fullDate(p.date),
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
         ],
       ),
     );

@@ -67,15 +67,21 @@ class ThemeProvider extends ChangeNotifier {
   static const String _themeKey = 'theme_mode';
   static const String _accentKey = 'accent_color';
   static const String _privacyKey = 'incognito_privacy_mode';
+  static const String _hapticsKey = 'enable_haptics_feedback';
+  static const String _amoledKey = 'enable_amoled_black_mode';
 
   ThemeMode _themeMode = ThemeMode.system;
   AppAccentColor _accentColor = AppAccentColor.emerald;
   bool _isPrivacyMode = false;
+  bool _isHapticsEnabled = true;
+  bool _isAmoledMode = false;
 
   ThemeMode get themeMode => _themeMode;
   AppAccentColor get accentColor => _accentColor;
   bool get isDarkMode => _themeMode == ThemeMode.dark;
   bool get isPrivacyMode => _isPrivacyMode;
+  bool get isHapticsEnabled => _isHapticsEnabled;
+  bool get isAmoledMode => _isAmoledMode;
 
   ThemeProvider() {
     _loadSettings();
@@ -90,6 +96,8 @@ class ThemeProvider extends ChangeNotifier {
       _accentColor = AppAccentColor.values[accentIndex];
     }
     _isPrivacyMode = prefs.getBool(_privacyKey) ?? false;
+    _isHapticsEnabled = prefs.getBool(_hapticsKey) ?? true;
+    _isAmoledMode = prefs.getBool(_amoledKey) ?? false;
     notifyListeners();
   }
 
@@ -112,6 +120,20 @@ class ThemeProvider extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_privacyKey, _isPrivacyMode);
+  }
+
+  Future<void> toggleHaptics() async {
+    _isHapticsEnabled = !_isHapticsEnabled;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_hapticsKey, _isHapticsEnabled);
+  }
+
+  Future<void> toggleAmoledMode() async {
+    _isAmoledMode = !_isAmoledMode;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_amoledKey, _isAmoledMode);
   }
 
   Future<void> toggleTheme() async {

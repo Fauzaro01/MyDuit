@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:uuid/uuid.dart';
 import '../models/transaction_model.dart';
 import '../models/budget_model.dart';
 import '../models/wallet_model.dart';
@@ -13,6 +14,7 @@ import '../models/tag_model.dart';
 import '../models/subscription_model.dart';
 import '../models/asset_model.dart';
 import '../models/transaction_template_model.dart';
+import '../models/debt_payment_model.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -35,7 +37,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 9,
+      version: 10,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -83,6 +85,8 @@ class DatabaseService {
         note TEXT,
         walletId TEXT,
         customCategoryId TEXT,
+        tags TEXT,
+        isPinned INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (walletId) REFERENCES wallets(id)
       )
     ''');
@@ -103,6 +107,7 @@ class DatabaseService {
         fromWalletId TEXT NOT NULL,
         toWalletId TEXT NOT NULL,
         amount REAL NOT NULL,
+        adminFee REAL NOT NULL DEFAULT 0.0,
         note TEXT,
         date INTEGER NOT NULL,
         FOREIGN KEY (fromWalletId) REFERENCES wallets(id),
@@ -115,6 +120,7 @@ class DatabaseService {
     await _createV7Tables(db);
     await _createV8Tables(db);
     await _createV9Tables(db);
+    await _createV10Tables(db);
 
     // Seed default wallet
     await _seedDefaultWallet(db);
@@ -263,6 +269,19 @@ class DatabaseService {
     ''');
   }
 
+  Future<void> _createV10Tables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS debt_payments(
+        id TEXT PRIMARY KEY,
+        debtId TEXT NOT NULL,
+        amount REAL NOT NULL,
+        date INTEGER NOT NULL,
+        note TEXT,
+        FOREIGN KEY (debtId) REFERENCES debts(id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('''
@@ -334,6 +353,15 @@ class DatabaseService {
     }
     if (oldVersion < 9) {
       await _createV9Tables(db);
+    }
+    if (oldVersion < 10) {
+      await _createV10Tables(db);
+      try {
+        await db.execute('ALTER TABLE transactions ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE transfers ADD COLUMN adminFee REAL NOT NULL DEFAULT 0.0');
+      } catch (_) {}
     }
   }
 
@@ -459,7 +487,7 @@ class DatabaseService {
         (transferInResult.first['total'] as num?)?.toDouble() ?? 0.0;
 
     final transferOutResult = await db.rawQuery(
-      'SELECT SUM(amount) as total FROM transfers WHERE fromWalletId = ?',
+      'SELECT SUM(amount + adminFee) as total FROM transfers WHERE fromWalletId = ?',
       [walletId],
     );
     final transferOut =
@@ -545,7 +573,7 @@ class DatabaseService {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'transactions',
-      orderBy: 'date DESC',
+      orderBy: 'isPinned DESC, date DESC',
     );
     return List.generate(maps.length, (i) {
       return TransactionModel.fromMap(maps[i]);
@@ -560,7 +588,7 @@ class DatabaseService {
       'transactions',
       where: 'type = ?',
       whereArgs: [type.index],
-      orderBy: 'date DESC',
+      orderBy: 'isPinned DESC, date DESC',
     );
     return List.generate(maps.length, (i) {
       return TransactionModel.fromMap(maps[i]);
@@ -576,7 +604,7 @@ class DatabaseService {
       'transactions',
       where: 'date >= ? AND date <= ?',
       whereArgs: [start.millisecondsSinceEpoch, end.millisecondsSinceEpoch],
-      orderBy: 'date DESC',
+      orderBy: 'isPinned DESC, date DESC',
     );
     return List.generate(maps.length, (i) {
       return TransactionModel.fromMap(maps[i]);
@@ -1004,7 +1032,12 @@ class DatabaseService {
     return List.generate(maps.length, (i) => DebtModel.fromMap(maps[i]));
   }
 
-  Future<void> addDebtPayment(String debtId, double amount) async {
+  Future<void> addDebtPayment(
+    String debtId,
+    double amount, {
+    String? note,
+    DateTime? date,
+  }) async {
     if (amount <= 0) return;
     final db = await database;
     final existing = await db.query(
@@ -1016,6 +1049,14 @@ class DatabaseService {
     final debt = DebtModel.fromMap(existing.first);
     final remaining = (debt.amount - debt.paidAmount).clamp(0.0, double.infinity);
     final paymentToApply = amount > remaining ? remaining : amount;
+
+    await db.insert('debt_payments', {
+      'id': const Uuid().v4(),
+      'debtId': debtId,
+      'amount': paymentToApply,
+      'date': (date ?? DateTime.now()).millisecondsSinceEpoch,
+      'note': note,
+    });
 
     await db.rawUpdate(
       'UPDATE debts SET paidAmount = paidAmount + ? WHERE id = ?',
@@ -1037,6 +1078,17 @@ class DatabaseService {
         );
       }
     }
+  }
+
+  Future<List<DebtPaymentModel>> getDebtPayments(String debtId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'debt_payments',
+      where: 'debtId = ?',
+      whereArgs: [debtId],
+      orderBy: 'date DESC',
+    );
+    return List.generate(maps.length, (i) => DebtPaymentModel.fromMap(maps[i]));
   }
 
   Future<double> getTotalDebtAmount(

@@ -9,12 +9,15 @@ class AppColors {
   // Surface colors
   static const Color surfaceLight = Color(0xFFF7F8FA);
   static const Color surfaceDark = Color(0xFF121218);
+  static const Color surfaceAmoled = Color(0xFF000000);
 
   static const Color cardLight = Color(0xFFFFFFFF);
   static const Color cardDark = Color(0xFF1C1C26);
+  static const Color cardAmoled = Color(0xFF0A0A0A);
 
   static const Color cardAltLight = Color(0xFFF0F2F5);
   static const Color cardAltDark = Color(0xFF242430);
+  static const Color cardAltAmoled = Color(0xFF141414);
 
   // Text
   static const Color textPrimaryLight = Color(0xFF1A1A2E);
@@ -173,31 +176,36 @@ class AppTheme {
     );
   }
 
-  static ThemeData darkTheme({Color? primaryAccent}) {
+  static ThemeData darkTheme({Color? primaryAccent, bool isAmoled = false}) {
     final primary = primaryAccent ?? AppColors.primaryDark;
+    final surface = isAmoled ? AppColors.surfaceAmoled : AppColors.surfaceDark;
+    final card = isAmoled ? AppColors.cardAmoled : AppColors.cardDark;
+    final cardAlt = isAmoled ? AppColors.cardAltAmoled : AppColors.cardAltDark;
+    final navBar = isAmoled ? Colors.black : AppColors.navBarDark;
+
     final base = ThemeData.dark(useMaterial3: true);
     return base.copyWith(
-      scaffoldBackgroundColor: AppColors.surfaceDark,
+      scaffoldBackgroundColor: surface,
       colorScheme: ColorScheme.dark(
         primary: primary,
-        onPrimary: AppColors.surfaceDark,
-        surface: AppColors.surfaceDark,
+        onPrimary: surface,
+        surface: surface,
         onSurface: AppColors.textPrimaryDark,
         secondary: primary.withValues(alpha: 0.15),
         onSecondary: primary,
         error: AppColors.expense,
       ),
       cardTheme: CardThemeData(
-        color: AppColors.cardDark,
+        color: card,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.surfaceDark,
+      appBarTheme: AppBarTheme(
+        backgroundColor: surface,
         foregroundColor: AppColors.textPrimaryDark,
         elevation: 0,
         centerTitle: false,
-        titleTextStyle: TextStyle(
+        titleTextStyle: const TextStyle(
           fontFamily: fontFamily,
           fontSize: 20,
           fontWeight: FontWeight.w700,
@@ -250,8 +258,8 @@ class AppTheme {
               color: AppColors.textPrimaryDark,
             ),
           ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: AppColors.navBarDark,
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: navBar,
         selectedItemColor: AppColors.primaryDark,
         unselectedItemColor: AppColors.textSecondaryDark,
         type: BottomNavigationBarType.fixed,
@@ -259,12 +267,12 @@ class AppTheme {
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: AppColors.primaryDark,
-        foregroundColor: AppColors.surfaceDark,
+        foregroundColor: surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.cardAltDark,
+        fillColor: cardAlt,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
@@ -288,7 +296,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryDark,
-          foregroundColor: AppColors.surfaceDark,
+          foregroundColor: surface,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           shape: RoundedRectangleBorder(
@@ -301,8 +309,8 @@ class AppTheme {
           ),
         ),
       ),
-      dividerTheme: const DividerThemeData(
-        color: Color(0xFF2D2D3A),
+      dividerTheme: DividerThemeData(
+        color: isAmoled ? const Color(0xFF1E1E1E) : const Color(0xFF2D2D3A),
         thickness: 1,
       ),
     );
