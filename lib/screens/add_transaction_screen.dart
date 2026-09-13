@@ -3,21 +3,25 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../models/transaction_model.dart';
+import '../models/transaction_template_model.dart';
 import '../models/wallet_model.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../providers/custom_category_provider.dart';
 import '../providers/tag_provider.dart';
+import '../providers/template_provider.dart';
 import '../services/receipt_parser_service.dart';
 import '../utils/formatters.dart';
 
 class AddTransactionScreen extends StatefulWidget {
   final TransactionModel? transaction;
+  final TransactionTemplateModel? template;
   final bool initialIsIncome;
 
   const AddTransactionScreen({
     super.key,
     this.transaction,
+    this.template,
     this.initialIsIncome = true,
   });
 
@@ -56,6 +60,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _customCategoryId = tx.customCategoryId;
       _date = tx.date;
       _tags = List<String>.from(tx.tags);
+    } else if (widget.template != null) {
+      final tpl = widget.template!;
+      _titleController.text = tpl.title;
+      _amountController.text = CurrencyInputService.isFormatted
+          ? RupiahInputFormatter.formatNumber(tpl.amount)
+          : tpl.amount.toStringAsFixed(0);
+      _noteController.text = tpl.note ?? '';
+      _type = tpl.type;
+      _category = tpl.category;
+      _customCategoryId = tpl.customCategoryId;
+      _date = DateTime.now();
+      _tags = List<String>.from(tpl.tags);
     } else {
       _type = widget.initialIsIncome
           ? TransactionType.income
@@ -74,6 +90,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         if (_isEditing && widget.transaction!.walletId != null) {
           _selectedWallet = walletProvider.getWalletById(
             widget.transaction!.walletId!,
+          );
+        } else if (widget.template?.walletId != null) {
+          _selectedWallet = walletProvider.getWalletById(
+            widget.template!.walletId!,
           );
         }
         _selectedWallet ??=
@@ -178,6 +198,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ],
               ),
             ),
+            if (!_isEditing) ...[
+              const SizedBox(height: 16),
+              _buildTemplateBar(context, isDark),
+            ],
             const SizedBox(height: 24),
 
             // Amount field
@@ -736,9 +760,82 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
+  Widget _buildTemplateBar(BuildContext context, bool isDark) {
+    final templateProvider = Provider.of<TemplateProvider?>(context);
+    final templates = templateProvider?.templates ?? [];
+    if (templates.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.bolt_rounded,
+              size: 16,
+              color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Template Cepat',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 36,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: templates.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final tpl = templates[index];
+              return ActionChip(
+                avatar: Text(tpl.emoji, style: const TextStyle(fontSize: 14)),
+                label: Text(
+                  '${tpl.name} · ${CurrencyFormatter.format(tpl.amount)}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                backgroundColor: isDark ? AppColors.cardAltDark : AppColors.cardAltLight,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                onPressed: () => _applyTemplate(tpl),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _applyTemplate(TransactionTemplateModel tpl) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _titleController.text = tpl.title;
+      _amountController.text = CurrencyInputService.isFormatted
+          ? RupiahInputFormatter.formatNumber(tpl.amount)
+          : tpl.amount.toStringAsFixed(0);
+      _noteController.text = tpl.note ?? '';
+      _type = tpl.type;
+      _category = tpl.category;
+      _customCategoryId = tpl.customCategoryId;
+      _tags = List<String>.from(tpl.tags);
+      if (tpl.walletId != null) {
+        final walletProvider = context.read<WalletProvider>();
+        final w = walletProvider.getWalletById(tpl.walletId!);
+        if (w != null) _selectedWallet = w;
+      }
+    });
+  }
+
   void _addTag(String tag) {
     final clean = tag.replaceAll('#', '').trim();
     if (clean.isNotEmpty && !_tags.contains(clean)) {
+      HapticFeedback.lightImpact();
       setState(() {
         _tags.add(clean);
         _tagInputController.clear();
@@ -749,6 +846,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
+    HapticFeedback.mediumImpact();
 
     final provider = context.read<TransactionProvider>();
     final transaction = TransactionModel(

@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../models/transaction_model.dart';
 import '../providers/transaction_provider.dart';
+import '../services/spending_anomaly_service.dart';
 import '../utils/formatters.dart';
 
 class InsightsCard extends StatelessWidget {
@@ -60,6 +61,27 @@ class InsightsCard extends StatelessWidget {
     bool isDark,
   ) {
     final insights = <_InsightData>[];
+
+    // 0. Spending Anomaly Alerts
+    final anomalies = SpendingAnomalyService.detectAnomalies(
+      provider.transactions,
+      targetMonth: provider.selectedMonth,
+      targetYear: provider.selectedYear,
+    );
+    for (final anom in anomalies.take(2)) {
+      insights.add(
+        _InsightData(
+          icon: anom.severity == AnomalySeverity.alert
+              ? Icons.warning_amber_rounded
+              : Icons.trending_up_rounded,
+          title: anom.title,
+          value: anom.severity == AnomalySeverity.alert ? 'Nominal Tinggi' : 'Kategori Melonjak',
+          color: anom.severity == AnomalySeverity.alert
+              ? AppColors.expense
+              : const Color(0xFFF59E0B),
+        ),
+      );
+    }
 
     // 1. Savings rate
     if (provider.totalIncome > 0) {

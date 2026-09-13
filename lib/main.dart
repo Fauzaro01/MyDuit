@@ -19,6 +19,7 @@ import 'providers/split_bill_provider.dart';
 import 'providers/tag_provider.dart';
 import 'providers/subscription_provider.dart';
 import 'providers/asset_provider.dart';
+import 'providers/template_provider.dart';
 import 'services/notification_service.dart';
 import 'services/google_drive_service.dart';
 import 'utils/formatters.dart';
@@ -53,6 +54,7 @@ void main() {
       late TagProvider tagProvider;
       late SubscriptionProvider subscriptionProvider;
       late AssetProvider assetProvider;
+      late TemplateProvider templateProvider;
 
       try {
         await initializeDateFormatting('id_ID', null);
@@ -88,6 +90,8 @@ void main() {
         tagProvider = TagProvider();
         subscriptionProvider = SubscriptionProvider();
         assetProvider = AssetProvider();
+        templateProvider = TemplateProvider();
+        await templateProvider.loadTemplates();
 
         // Initialize notifications
         try {
@@ -119,6 +123,7 @@ void main() {
         tagProvider = TagProvider();
         subscriptionProvider = SubscriptionProvider();
         assetProvider = AssetProvider();
+        templateProvider = TemplateProvider();
       }
 
       runApp(
@@ -137,6 +142,7 @@ void main() {
             ChangeNotifierProvider.value(value: tagProvider),
             ChangeNotifierProvider.value(value: subscriptionProvider),
             ChangeNotifierProvider.value(value: assetProvider),
+            ChangeNotifierProvider.value(value: templateProvider),
           ],
           child: MyDuitApp(showOnboarding: !onboardingComplete),
         ),

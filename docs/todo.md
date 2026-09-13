@@ -61,5 +61,12 @@ Daftar tugas teridentifikasi dari analisis kode MyDuit:
 - [x] **Task 57**: Bungkus `SavingsProvider.loadGoals` dalam `try-finally` dan auto-complete goal saat target tercapai di `addAmountToGoal`.
 - [x] **Task 58**: Tambahkan validasi non-negatif (`clamp(0.0, infinity)`) pada `SplitBillModel.remainingTotal` dan helper `isFullyPaid`.
 - [x] **Task 59**: Tambahkan semantic accessibility tooltips pada navigasi bulan `MonthSelector`.
+- [x] **Task 60**: Tambahkan haptic feedback responsif (`HapticFeedback.lightImpact`, `mediumImpact`, `selectionClick`) pada submit transaksi, seleksi tag, dan template cepat.
+- [x] **Task 61**: Tambahkan filter rentang tanggal kustom (`DateTimeRange` dengan boundary 00:00:00 - 23:59:59) pada `HistoryScreen`.
+- [x] **Task 62**: Tambahkan shortcut pencarian global transaksi di header `HomeScreen` menuju `HistoryScreen`.
+- [x] **Task 63**: Implementasi arsitektur Transaction Templates (`TransactionTemplateModel`, migrasi skema v9 di `DatabaseService`, `TemplateProvider`, bar template catat cepat di `HomeScreen` & `AddTransactionScreen`).
+- [x] **Task 64**: Tambahkan sistem pengingat otomatis tanggal jatuh tempo langganan & pembayaran hutang di `NotificationService`.
+- [x] **Task 65**: Implementasi `SpendingAnomalyService` untuk deteksi lonjakan transaksi tidak wajar dan peningkatan kategori belanja pada `InsightsCard`.
+- [x] **Task 66**: Implementasi suite Kalkulator Finansial (`FinancialCalculatorService` & `FinancialCalculatorScreen`) mencakup Bunga Majemuk, Simulasi Pinjaman/KPR, Dana Darurat, dan Pensiun/FIRE.
 
 

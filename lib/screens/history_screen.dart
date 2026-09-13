@@ -28,6 +28,31 @@ class _HistoryScreenState extends State<HistoryScreen>
   String? _selectedCustomCatId;
   String? _selectedCategoryName;
   String? _selectedTag;
+  DateTimeRange? _selectedDateRange;
+
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 2),
+      initialDateRange: _selectedDateRange ??
+          DateTimeRange(
+            start: DateTime(now.year, now.month, 1),
+            end: now,
+          ),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() => _selectedDateRange = picked);
+    }
+  }
 
   @override
   void initState() {
@@ -296,6 +321,18 @@ class _HistoryScreenState extends State<HistoryScreen>
                       children: [
                         IconButton(
                           icon: Icon(
+                            _selectedDateRange != null
+                                ? Icons.date_range_rounded
+                                : Icons.date_range_outlined,
+                            color: _selectedDateRange != null
+                                ? theme.colorScheme.primary
+                                : null,
+                          ),
+                          tooltip: 'Rentang Tanggal',
+                          onPressed: _pickDateRange,
+                        ),
+                        IconButton(
+                          icon: Icon(
                             hasCategoryFilter
                                 ? Icons.filter_alt_rounded
                                 : Icons.filter_alt_outlined,
@@ -356,6 +393,27 @@ class _HistoryScreenState extends State<HistoryScreen>
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
+                      // Active date range filter chip
+                      if (_selectedDateRange != null)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Chip(
+                            label: Text(
+                              '${DateFormatter.shortDate(_selectedDateRange!.start)} - ${DateFormatter.shortDate(_selectedDateRange!.end)}',
+                            ),
+                            labelStyle: const TextStyle(fontSize: 12, color: Colors.white),
+                            backgroundColor: theme.colorScheme.primary,
+                            deleteIcon: const Icon(Icons.close_rounded, size: 16, color: Colors.white),
+                            onDeleted: () {
+                              setState(() {
+                                _selectedDateRange = null;
+                              });
+                            },
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
                       // Active category filter chip
                       if (hasCategoryFilter)
                         Padding(
@@ -564,6 +622,7 @@ class _HistoryScreenState extends State<HistoryScreen>
                   category: _selectedCategory,
                   customCategoryId: _selectedCustomCatId,
                   tag: _selectedTag,
+                  dateRange: _selectedDateRange,
                   searchQuery: _searchController.text.trim(),
                 ),
                 _TransactionList(
@@ -572,6 +631,7 @@ class _HistoryScreenState extends State<HistoryScreen>
                   category: _selectedCategory,
                   customCategoryId: _selectedCustomCatId,
                   tag: _selectedTag,
+                  dateRange: _selectedDateRange,
                   searchQuery: _searchController.text.trim(),
                 ),
                 _TransactionList(
@@ -580,6 +640,7 @@ class _HistoryScreenState extends State<HistoryScreen>
                   category: _selectedCategory,
                   customCategoryId: _selectedCustomCatId,
                   tag: _selectedTag,
+                  dateRange: _selectedDateRange,
                   searchQuery: _searchController.text.trim(),
                 ),
               ],
@@ -597,6 +658,7 @@ class _TransactionList extends StatelessWidget {
   final TransactionCategory? category;
   final String? customCategoryId;
   final String? tag;
+  final DateTimeRange? dateRange;
   final String searchQuery;
 
   const _TransactionList({
@@ -605,6 +667,7 @@ class _TransactionList extends StatelessWidget {
     this.category,
     this.customCategoryId,
     this.tag,
+    this.dateRange,
     this.searchQuery = '',
   });
 
@@ -625,6 +688,26 @@ class _TransactionList extends StatelessWidget {
       transactions = provider.incomeTransactions;
     } else {
       transactions = provider.expenseTransactions;
+    }
+
+    // Filter by custom date range if selected
+    if (dateRange != null) {
+      final start = DateTime(
+        dateRange!.start.year,
+        dateRange!.start.month,
+        dateRange!.start.day,
+      );
+      final end = DateTime(
+        dateRange!.end.year,
+        dateRange!.end.month,
+        dateRange!.end.day,
+        23,
+        59,
+        59,
+      );
+      transactions = transactions
+          .where((t) => !t.date.isBefore(start) && !t.date.isAfter(end))
+          .toList();
     }
 
     // Filter by wallet if selected

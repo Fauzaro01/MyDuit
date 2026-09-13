@@ -3,6 +3,9 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tzdata;
+import '../models/subscription_model.dart';
+import '../models/debt_model.dart';
+import '../utils/formatters.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _plugin =
@@ -159,5 +162,99 @@ class NotificationService {
       scheduledDate = scheduledDate.add(const Duration(days: 1));
     }
     return scheduledDate;
+  }
+
+  /// Schedule upcoming subscription billing reminder
+  static Future<void> scheduleSubscriptionReminder(SubscriptionModel sub) async {
+    if (!sub.isActive) return;
+    final notifId = 10000 + (sub.id.hashCode % 50000).abs();
+
+    const androidDetails = AndroidNotificationDetails(
+      'myduit_bills',
+      'Pengingat Tagihan & Langganan',
+      channelDescription: 'Pengingat tanggal jatuh tempo langganan dan tagihan',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(),
+    );
+
+    final now = DateTime.now();
+    DateTime nextDue = DateTime(now.year, now.month, sub.dueDay.clamp(1, 28));
+    if (nextDue.isBefore(now)) {
+      nextDue = DateTime(now.year, now.month + 1, sub.dueDay.clamp(1, 28));
+    }
+    final reminderDate = nextDue.subtract(Duration(days: sub.reminderDaysBefore));
+    final scheduledDate = tz.TZDateTime(
+      tz.local,
+      reminderDate.year,
+      reminderDate.month,
+      reminderDate.day,
+      9,
+      0,
+    );
+
+    if (scheduledDate.isAfter(tz.TZDateTime.now(tz.local))) {
+      await _plugin.zonedSchedule(
+        id: notifId,
+        title: 'Pengingat Langganan: ${sub.name} 🔔',
+        body: 'Langganan ${sub.name} (${CurrencyFormatter.format(sub.amount)}) akan jatuh tempo dalam ${sub.reminderDaysBefore} hari.',
+        scheduledDate: scheduledDate,
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+    }
+  }
+
+  /// Schedule upcoming debt due date reminder
+  static Future<void> scheduleDebtReminder(DebtModel debt) async {
+    if (debt.isSettled || debt.dueDate == null) return;
+    final notifId = 60000 + (debt.id.hashCode % 30000).abs();
+
+    const androidDetails = AndroidNotificationDetails(
+      'myduit_debts',
+      'Pengingat Hutang & Piutang',
+      channelDescription: 'Pengingat jatuh tempo pembayaran hutang & piutang',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(),
+    );
+
+    final due = debt.dueDate!;
+    final reminderDate = due.subtract(const Duration(days: 1));
+    final scheduledDate = tz.TZDateTime(
+      tz.local,
+      reminderDate.year,
+      reminderDate.month,
+      reminderDate.day,
+      9,
+      0,
+    );
+
+    if (scheduledDate.isAfter(tz.TZDateTime.now(tz.local))) {
+      final isDebt = debt.type == DebtType.iOwe;
+      final title = isDebt ? 'Pengingat Bayar Hutang 💳' : 'Pengingat Tagih Piutang 💰';
+      final body = isDebt
+          ? 'Hutang kepada ${debt.personName} (${CurrencyFormatter.format(debt.remainingAmount)}) jatuh tempo besok.'
+          : 'Piutang dari ${debt.personName} (${CurrencyFormatter.format(debt.remainingAmount)}) jatuh tempo besok.';
+
+      await _plugin.zonedSchedule(
+        id: notifId,
+        title: title,
+        body: body,
+        scheduledDate: scheduledDate,
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+    }
   }
 }

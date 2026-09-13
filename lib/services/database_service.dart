@@ -12,6 +12,7 @@ import '../models/split_bill_model.dart';
 import '../models/tag_model.dart';
 import '../models/subscription_model.dart';
 import '../models/asset_model.dart';
+import '../models/transaction_template_model.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -34,7 +35,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -113,6 +114,7 @@ class DatabaseService {
     await _createV5Tables(db);
     await _createV7Tables(db);
     await _createV8Tables(db);
+    await _createV9Tables(db);
 
     // Seed default wallet
     await _seedDefaultWallet(db);
@@ -242,6 +244,25 @@ class DatabaseService {
     ''');
   }
 
+  Future<void> _createV9Tables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS transaction_templates(
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        title TEXT NOT NULL,
+        amount REAL NOT NULL,
+        type INTEGER NOT NULL,
+        category INTEGER NOT NULL,
+        customCategoryId TEXT,
+        walletId TEXT,
+        note TEXT,
+        tags TEXT,
+        emoji TEXT NOT NULL DEFAULT '⚡',
+        FOREIGN KEY (walletId) REFERENCES wallets(id)
+      )
+    ''');
+  }
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('''
@@ -310,6 +331,9 @@ class DatabaseService {
       try {
         await db.execute('ALTER TABLE budgets ADD COLUMN isRollover INTEGER NOT NULL DEFAULT 0');
       } catch (_) {}
+    }
+    if (oldVersion < 9) {
+      await _createV9Tables(db);
     }
   }
 
@@ -1279,5 +1303,48 @@ class DatabaseService {
       orderBy: 'updatedAt DESC',
     );
     return List.generate(maps.length, (i) => AssetModel.fromMap(maps[i]));
+  }
+
+  // ── Transaction Template CRUD ─────────────────────────────
+  Future<void> insertTemplate(TransactionTemplateModel template) async {
+    final db = await database;
+    await db.insert(
+      'transaction_templates',
+      template.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateTemplate(TransactionTemplateModel template) async {
+    final db = await database;
+    await db.update(
+      'transaction_templates',
+      template.toMap(),
+      where: 'id = ?',
+      whereArgs: [template.id],
+    );
+  }
+
+  Future<void> deleteTemplate(String id) async {
+    final db = await database;
+    await db.delete('transaction_templates', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<TransactionTemplateModel>> getAllTemplates() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'transaction_templates',
+    );
+    if (maps.isEmpty) {
+      // Seed default templates
+      for (final tpl in TransactionTemplateModel.defaultTemplates) {
+        await insertTemplate(tpl);
+      }
+      final List<Map<String, dynamic>> seeded = await db.query(
+        'transaction_templates',
+      );
+      return List.generate(seeded.length, (i) => TransactionTemplateModel.fromMap(seeded[i]));
+    }
+    return List.generate(maps.length, (i) => TransactionTemplateModel.fromMap(maps[i]));
   }
 }
