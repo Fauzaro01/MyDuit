@@ -11,6 +11,8 @@ import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../utils/formatters.dart';
 
+enum DebtSortOption { dueDate, amountDesc, nameAsc }
+
 class DebtScreen extends StatefulWidget {
   const DebtScreen({super.key});
 
@@ -21,6 +23,7 @@ class DebtScreen extends StatefulWidget {
 class _DebtScreenState extends State<DebtScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  DebtSortOption _sortOption = DebtSortOption.dueDate;
 
   @override
   void initState() {
@@ -37,6 +40,28 @@ class _DebtScreenState extends State<DebtScreen>
     super.dispose();
   }
 
+  List<DebtModel> _sortDebts(List<DebtModel> list) {
+    final sorted = List<DebtModel>.from(list);
+    switch (_sortOption) {
+      case DebtSortOption.dueDate:
+        sorted.sort((a, b) {
+          if (a.dueDate == null && b.dueDate == null) return 0;
+          if (a.dueDate == null) return 1;
+          if (b.dueDate == null) return -1;
+          return a.dueDate!.compareTo(b.dueDate!);
+        });
+        break;
+      case DebtSortOption.amountDesc:
+        sorted.sort((a, b) => b.remainingAmount.compareTo(a.remainingAmount));
+        break;
+      case DebtSortOption.nameAsc:
+        sorted.sort((a, b) =>
+            a.personName.toLowerCase().compareTo(b.personName.toLowerCase()));
+        break;
+    }
+    return sorted;
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<DebtProvider>();
@@ -46,6 +71,46 @@ class _DebtScreenState extends State<DebtScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Hutang & Piutang'),
+        actions: [
+          PopupMenuButton<DebtSortOption>(
+            icon: const Icon(Icons.sort_rounded),
+            tooltip: 'Urutkan',
+            initialValue: _sortOption,
+            onSelected: (option) => setState(() => _sortOption = option),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: DebtSortOption.dueDate,
+                child: Row(
+                  children: [
+                    Icon(Icons.event_outlined, size: 18),
+                    SizedBox(width: 8),
+                    Text('Jatuh Tempo'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: DebtSortOption.amountDesc,
+                child: Row(
+                  children: [
+                    Icon(Icons.monetization_on_outlined, size: 18),
+                    SizedBox(width: 8),
+                    Text('Nominal Terbesar'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: DebtSortOption.nameAsc,
+                child: Row(
+                  children: [
+                    Icon(Icons.sort_by_alpha_outlined, size: 18),
+                    SizedBox(width: 8),
+                    Text('Nama (A-Z)'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: [
@@ -83,30 +148,30 @@ class _DebtScreenState extends State<DebtScreen>
                     controller: _tabController,
                     children: [
                       _DebtList(
-                        debts: provider.myDebts,
-                        settled: provider.settledDebts
+                        debts: _sortDebts(provider.myDebts),
+                        settled: _sortDebts(provider.settledDebts
                             .where((d) => d.type == DebtType.iOwe)
-                            .toList(),
+                            .toList()),
                         isDark: isDark,
                         emptyMessage: 'Tidak ada hutang 🎉',
                         onAddPayment: (debt) =>
                             _showPaymentSheet(context, debt),
                         onSettle: (debt) => _confirmSettle(context, provider, debt),
                         onEdit: (debt) => _showAddDebtSheet(context, debt),
-                        onDelete: (id) => _confirmDelete(context, provider, id),
+                        onDelete: (debt) => _confirmDelete(context, provider, debt),
                       ),
                       _DebtList(
-                        debts: provider.myReceivables,
-                        settled: provider.settledDebts
+                        debts: _sortDebts(provider.myReceivables),
+                        settled: _sortDebts(provider.settledDebts
                             .where((d) => d.type == DebtType.owedToMe)
-                            .toList(),
+                            .toList()),
                         isDark: isDark,
                         emptyMessage: 'Tidak ada piutang',
                         onAddPayment: (debt) =>
                             _showPaymentSheet(context, debt),
                         onSettle: (debt) => _confirmSettle(context, provider, debt),
                         onEdit: (debt) => _showAddDebtSheet(context, debt),
-                        onDelete: (id) => _confirmDelete(context, provider, id),
+                        onDelete: (debt) => _confirmDelete(context, provider, debt),
                       ),
                     ],
                   ),
@@ -116,12 +181,14 @@ class _DebtScreenState extends State<DebtScreen>
     );
   }
 
-  void _confirmDelete(BuildContext context, DebtProvider provider, String id) {
+  void _confirmDelete(BuildContext context, DebtProvider provider, DebtModel debt) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Hapus?'),
-        content: const Text('Data hutang/piutang ini akan dihapus permanen.'),
+        title: const Text('Hapus Catatan?'),
+        content: Text(
+          'Apakah kamu yakin ingin menghapus catatan ${debt.type == DebtType.iOwe ? "hutang ke" : "piutang dari"} "${debt.personName}" (${CurrencyFormatter.format(debt.remainingAmount)})?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -129,7 +196,7 @@ class _DebtScreenState extends State<DebtScreen>
           ),
           TextButton(
             onPressed: () {
-              provider.deleteDebt(id);
+              provider.deleteDebt(debt.id);
               Navigator.pop(ctx);
             },
             child: const Text('Hapus', style: TextStyle(color: AppColors.expense)),
@@ -500,7 +567,7 @@ class _DebtList extends StatelessWidget {
   final void Function(DebtModel) onAddPayment;
   final void Function(DebtModel) onSettle;
   final void Function(DebtModel) onEdit;
-  final void Function(String) onDelete;
+  final void Function(DebtModel) onDelete;
 
   const _DebtList({
     required this.debts,
@@ -535,7 +602,7 @@ class _DebtList extends StatelessWidget {
                     onAddPayment: () => onAddPayment(entry.value),
                     onSettle: () => onSettle(entry.value),
                     onEdit: () => onEdit(entry.value),
-                    onDelete: () => onDelete(entry.value.id),
+                    onDelete: () => onDelete(entry.value),
                   )
                   .animate()
                   .fadeIn(delay: (entry.key * 60).ms, duration: 400.ms)
@@ -559,7 +626,7 @@ class _DebtList extends StatelessWidget {
               onAddPayment: null,
               onSettle: null,
               onEdit: null,
-              onDelete: () => onDelete(debt.id),
+              onDelete: () => onDelete(debt),
             ),
           ),
         ],
@@ -594,6 +661,29 @@ class _DebtTile extends StatelessWidget {
         ? AppColors.expense
         : AppColors.income;
 
+    final days = debt.daysUntilDue;
+    Color badgeBg;
+    Color badgeFg;
+    String badgeText;
+
+    if (isOverdue) {
+      badgeBg = AppColors.expense.withValues(alpha: 0.15);
+      badgeFg = AppColors.expense;
+      badgeText = '⚠️ Terlambat ${-(days ?? 0)}h';
+    } else if (days != null && days <= 7) {
+      badgeBg = Colors.orange.withValues(alpha: 0.15);
+      badgeFg = Colors.orange;
+      badgeText = days == 0 ? '⏰ Hari ini' : '⏰ $days hari lagi';
+    } else if (days != null) {
+      badgeBg = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.06);
+      badgeFg = isDark ? Colors.white70 : Colors.black87;
+      badgeText = '📅 $days hari lagi';
+    } else {
+      badgeBg = Colors.transparent;
+      badgeFg = Colors.transparent;
+      badgeText = '';
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
@@ -602,7 +692,7 @@ class _DebtTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: isOverdue
             ? Border.all(
-                color: Colors.orange.withValues(alpha: 0.5),
+                color: AppColors.expense.withValues(alpha: 0.5),
                 width: 1.5,
               )
             : null,
@@ -648,15 +738,27 @@ class _DebtTile extends StatelessWidget {
                       color: color,
                     ),
                   ),
-                  if (debt.dueDate != null)
-                    Text(
-                      isOverdue ? 'Terlambat!' : '${debt.daysUntilDue}h lagi',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: isOverdue ? Colors.orange : null,
+                  if (debt.dueDate != null && !debt.isSettled) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: badgeBg,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        badgeText,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: badgeFg,
+                        ),
                       ),
                     ),
+                  ],
                 ],
               ),
             ],

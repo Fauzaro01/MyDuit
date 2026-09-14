@@ -583,6 +583,17 @@ class DatabaseService {
     await db.delete('transactions', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<int> deleteTransactionsByMonth(int year, int month) async {
+    final start = DateTime(year, month, 1);
+    final end = DateTime(year, month + 1, 0, 23, 59, 59);
+    final db = await database;
+    return await db.delete(
+      'transactions',
+      where: 'date >= ? AND date <= ?',
+      whereArgs: [start.millisecondsSinceEpoch, end.millisecondsSinceEpoch],
+    );
+  }
+
   Future<List<TransactionModel>> getAllTransactions() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
@@ -1264,6 +1275,22 @@ class DatabaseService {
     await db.update(
       'split_bills',
       {'isSettled': isSettled ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [billId],
+    );
+  }
+
+  Future<void> setAllSplitParticipantsPaid(String billId, bool isPaid) async {
+    final db = await database;
+    await db.update(
+      'split_participants',
+      {'isPaid': isPaid ? 1 : 0},
+      where: 'billId = ?',
+      whereArgs: [billId],
+    );
+    await db.update(
+      'split_bills',
+      {'isSettled': isPaid ? 1 : 0},
       where: 'id = ?',
       whereArgs: [billId],
     );

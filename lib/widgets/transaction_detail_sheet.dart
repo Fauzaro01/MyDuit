@@ -88,12 +88,21 @@ void showTransactionDetail(
           // Amount
           InkWell(
             onTap: () {
-              Clipboard.setData(
-                ClipboardData(
-                  text:
-                      '${transaction.title}: ${CurrencyFormatter.format(transaction.amount)} (${DateFormatter.fullDate(transaction.date)})',
-                ),
-              );
+              final summary = StringBuffer();
+              summary.writeln('📋 Rincian Transaksi MyDuit');
+              summary.writeln('• Judul: ${transaction.title}');
+              summary.writeln(
+                  '• Jumlah: ${isIncome ? '+' : '-'} ${CurrencyFormatter.format(transaction.amount)}');
+              summary.writeln('• Kategori: $iconText $categoryLabel');
+              summary.writeln('• Tanggal: ${DateFormatter.fullDate(transaction.date)}');
+              if (wallet != null) {
+                summary.writeln('• Dompet: ${wallet.emoji} ${wallet.name}');
+              }
+              if (transaction.note != null && transaction.note!.isNotEmpty) {
+                summary.writeln('• Catatan: ${transaction.note}');
+              }
+
+              Clipboard.setData(ClipboardData(text: summary.toString().trim()));
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Detail transaksi disalin ke clipboard 📋'),
@@ -399,8 +408,8 @@ void showTransactionDetail(
                         borderRadius: BorderRadius.circular(20),
                       ),
                       title: const Text('Hapus Transaksi'),
-                      content: const Text(
-                        'Apakah kamu yakin ingin menghapus transaksi ini?',
+                      content: Text(
+                        'Apakah kamu yakin ingin menghapus "${transaction.title}" (${CurrencyFormatter.format(transaction.amount)})?',
                       ),
                       actions: [
                         TextButton(
