@@ -158,9 +158,33 @@ class _SplitBillScreenState extends State<SplitBillScreen>
                       IconButton(
                         icon: const Icon(Icons.delete_outline_rounded),
                         tooltip: 'Hapus Patungan',
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          provider.deleteBill(currentBill.id);
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (dialogCtx) => AlertDialog(
+                              title: const Text('Hapus Patungan?'),
+                              content: Text(
+                                'Apakah kamu yakin ingin menghapus patungan "${currentBill.title}" (${CurrencyFormatter.format(currentBill.totalAmount)})?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dialogCtx, false),
+                                  child: const Text('Batal'),
+                                ),
+                                FilledButton(
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppColors.expense,
+                                  ),
+                                  onPressed: () => Navigator.pop(dialogCtx, true),
+                                  child: const Text('Hapus'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            provider.deleteBill(currentBill.id);
+                          }
                         },
                       ),
                     ],
@@ -173,9 +197,49 @@ class _SplitBillScreenState extends State<SplitBillScreen>
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 8),
-                  Text(
-                    'Daftar Anggota & Status Bayar:',
-                    style: Theme.of(ctx).textTheme.labelLarge,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Daftar Anggota & Status Bayar:',
+                        style: Theme.of(ctx).textTheme.labelLarge,
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        icon: Icon(
+                          currentBill.isSettled
+                              ? Icons.remove_done_rounded
+                              : Icons.done_all_rounded,
+                          size: 16,
+                          color: currentBill.isSettled
+                              ? Colors.grey
+                              : AppColors.income,
+                        ),
+                        label: Text(
+                          currentBill.isSettled
+                              ? 'Reset Status'
+                              : 'Tandai Semua Lunas',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: currentBill.isSettled
+                                ? Colors.grey
+                                : AppColors.income,
+                          ),
+                        ),
+                        onPressed: () {
+                          final shouldPayAll = !currentBill.isSettled;
+                          provider.setAllParticipantsPaid(
+                            currentBill.id,
+                            shouldPayAll,
+                          );
+                        },
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   ...currentBill.participants.map((p) {

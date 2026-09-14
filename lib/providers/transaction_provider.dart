@@ -146,6 +146,16 @@ class TransactionProvider extends ChangeNotifier {
     _walletProvider?.refreshBalances();
   }
 
+  Future<int> deleteTransactionsByMonth(int year, int month) async {
+    final count = await _dbService.deleteTransactionsByMonth(
+      year,
+      month,
+    );
+    await loadData();
+    _walletProvider?.refreshBalances();
+    return count;
+  }
+
   Future<void> togglePin(String id) async {
     final tx = _transactions.where((t) => t.id == id).firstOrNull;
     if (tx == null) return;

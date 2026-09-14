@@ -402,14 +402,17 @@ class WalletScreen extends StatelessWidget {
   }
 
   void _confirmDeleteWallet(BuildContext context, WalletModel wallet) {
+    final walletProvider = context.read<WalletProvider>();
+    final balance = walletProvider.walletBalances[wallet.id] ?? 0.0;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Hapus Dompet'),
         content: Text(
-          'Apakah kamu yakin ingin menghapus dompet "${wallet.name}"? '
-          'Semua transaksi akan dipindahkan ke Dompet Utama.',
+          'Apakah kamu yakin ingin menghapus dompet "${wallet.emoji} ${wallet.name}" (${CurrencyFormatter.format(balance)})? '
+          'Semua riwayat transaksi akan dipindahkan ke Dompet Utama.',
         ),
         actions: [
           TextButton(

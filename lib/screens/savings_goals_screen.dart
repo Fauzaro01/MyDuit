@@ -13,6 +13,8 @@ import '../widgets/emoji_picker_sheet.dart';
 import '../services/auto_allocation_engine.dart';
 import '../services/compound_interest_service.dart';
 
+enum SavingsFilter { all, active, completed }
+
 class SavingsGoalsScreen extends StatefulWidget {
   const SavingsGoalsScreen({super.key});
 
@@ -21,6 +23,10 @@ class SavingsGoalsScreen extends StatefulWidget {
 }
 
 class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  SavingsFilter _filter = SavingsFilter.all;
+
   @override
   void initState() {
     super.initState();
@@ -30,23 +36,36 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<SavingsGoalModel> _applySearch(List<SavingsGoalModel> list) {
+    if (_searchQuery.trim().isEmpty) return list;
+    final q = _searchQuery.toLowerCase();
+    return list.where((g) => g.title.toLowerCase().contains(q)).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final provider = context.watch<SavingsProvider>();
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final active = provider.activeGoals;
-    final completed = provider.completedGoals;
+    final active = _applySearch(provider.activeGoals);
+    final completed = _applySearch(provider.completedGoals);
+    final hasAnyGoals = provider.goals.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tujuan Tabungan'),
         actions: [
-          if (active.length > 1)
+          if (provider.activeGoals.length > 1)
             IconButton(
               icon: const Icon(Icons.auto_awesome_rounded),
               tooltip: 'Alokasi Cerdas Multi-Target',
-              onPressed: () => _showAutoAllocationSheet(context, active),
+              onPressed: () => _showAutoAllocationSheet(context, provider.activeGoals),
             ),
         ],
       ),
@@ -60,26 +79,69 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
       ),
       body: provider.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : (active.isEmpty && completed.isEmpty)
+          : !hasAnyGoals
           ? _buildEmpty(theme)
           : ListView(
               padding: const EdgeInsets.all(20),
               children: [
+                // Search Bar
+                TextField(
+                  controller: _searchController,
+                  onChanged: (val) => setState(() => _searchQuery = val),
+                  decoration: InputDecoration(
+                    hintText: 'Cari tujuan tabungan...',
+                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: isDark ? AppColors.cardAltDark : AppColors.cardAltLight,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Status Filter Chips
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildChip('Semua (${provider.goals.length})', SavingsFilter.all, isDark),
+                      const SizedBox(width: 8),
+                      _buildChip('Sedang Berjalan (${provider.activeGoals.length})', SavingsFilter.active, isDark),
+                      const SizedBox(width: 8),
+                      _buildChip('Tercapai 🎉 (${provider.completedGoals.length})', SavingsFilter.completed, isDark),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
                 // Summary card
-                if (active.isNotEmpty)
+                if (provider.activeGoals.isNotEmpty && _filter != SavingsFilter.completed)
                   _SummaryCard(
                         isDark: isDark,
                         totalSaved: provider.totalSaved,
                         totalTarget: provider.totalTarget,
-                        activeCount: active.length,
+                        activeCount: provider.activeGoals.length,
                       )
                       .animate()
                       .fadeIn(duration: 400.ms)
                       .slideY(begin: 0.05, end: 0),
-                const SizedBox(height: 20),
+                if (provider.activeGoals.isNotEmpty && _filter != SavingsFilter.completed)
+                  const SizedBox(height: 20),
 
-                if (active.isNotEmpty) ...[
-                  _SectionHeader(title: 'Sedang Berjalan'),
+                if (active.isNotEmpty && _filter != SavingsFilter.completed) ...[
+                  _SectionHeader(title: 'Sedang Berjalan (${active.length})'),
                   const SizedBox(height: 12),
                   ...active.asMap().entries.map(
                     (entry) =>
@@ -93,7 +155,7 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
                               onDelete: () => _confirmDelete(
                                 context,
                                 provider,
-                                entry.value.id,
+                                entry.value,
                               ),
                             )
                             .animate()
@@ -104,7 +166,7 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
                             .slideY(begin: 0.05, end: 0),
                   ),
                 ],
-                if (completed.isNotEmpty) ...[
+                if (completed.isNotEmpty && _filter != SavingsFilter.active) ...[
                   const SizedBox(height: 24),
                   _SectionHeader(title: 'Tercapai 🎉 (${completed.length})'),
                   const SizedBox(height: 12),
@@ -115,12 +177,39 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
                       onAddAmount: null,
                       onEdit: null,
                       onDelete: () =>
-                          _confirmDelete(context, provider, goal.id),
+                          _confirmDelete(context, provider, goal),
                     ),
                   ),
                 ],
+                if (active.isEmpty && completed.isEmpty && _searchQuery.isNotEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: Text(
+                        'Tidak ada target tabungan yang cocok dengan pencarian.',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ),
               ],
             ),
+    );
+  }
+
+  Widget _buildChip(String label, SavingsFilter f, bool isDark) {
+    final isSelected = _filter == f;
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? (isDark ? Colors.black : Colors.white) : null,
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+      onSelected: (_) => setState(() => _filter = f),
     );
   }
 
@@ -149,13 +238,15 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
   void _confirmDelete(
     BuildContext context,
     SavingsProvider provider,
-    String id,
+    SavingsGoalModel goal,
   ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Hapus Tujuan?'),
-        content: const Text('Tujuan tabungan ini akan dihapus permanen.'),
+        title: const Text('Hapus Tujuan Tabungan?'),
+        content: Text(
+          'Apakah kamu yakin ingin menghapus tujuan tabungan "${goal.title}" (Target: ${CurrencyFormatter.format(goal.targetAmount)})?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -163,7 +254,7 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
           ),
           TextButton(
             onPressed: () {
-              provider.deleteGoal(id);
+              provider.deleteGoal(goal.id);
               Navigator.pop(ctx);
             },
             child: Text('Hapus', style: TextStyle(color: AppColors.expense)),

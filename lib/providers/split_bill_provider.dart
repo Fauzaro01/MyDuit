@@ -108,4 +108,10 @@ class SplitBillProvider extends ChangeNotifier {
     await _dbService.updateSplitParticipantDebtId(participant.id, newDebt.id);
     await loadBills();
   }
+
+  /// Mark all participants of a bill as paid or unpaid
+  Future<void> setAllParticipantsPaid(String billId, bool isPaid) async {
+    await _dbService.setAllSplitParticipantsPaid(billId, isPaid);
+    await loadBills();
+  }
 }

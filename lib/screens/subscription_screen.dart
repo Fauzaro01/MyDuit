@@ -8,8 +8,38 @@ import '../providers/transaction_provider.dart';
 import '../services/subscription_analyzer_service.dart';
 import '../utils/formatters.dart';
 
-class SubscriptionScreen extends StatelessWidget {
+enum SubscriptionFilter { all, active, dueThisMonth, highestCost }
+
+class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
+
+  @override
+  State<SubscriptionScreen> createState() => _SubscriptionScreenState();
+}
+
+class _SubscriptionScreenState extends State<SubscriptionScreen> {
+  SubscriptionFilter _selectedFilter = SubscriptionFilter.all;
+
+  List<SubscriptionModel> _filterAndSort(List<SubscriptionModel> subs) {
+    final today = DateTime.now();
+    var list = List<SubscriptionModel>.from(subs);
+
+    switch (_selectedFilter) {
+      case SubscriptionFilter.all:
+        break;
+      case SubscriptionFilter.active:
+        list = list.where((s) => s.isActive).toList();
+        break;
+      case SubscriptionFilter.dueThisMonth:
+        list = list.where((s) => s.isActive && s.dueDay >= today.day).toList();
+        list.sort((a, b) => a.dueDay.compareTo(b.dueDay));
+        break;
+      case SubscriptionFilter.highestCost:
+        list.sort((a, b) => b.monthlyCost.compareTo(a.monthlyCost));
+        break;
+    }
+    return list;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,6 +54,7 @@ class SubscriptionScreen extends StatelessWidget {
       subscriptions: subProvider.subscriptions,
       transactions: txProvider.transactions,
     );
+    final displayedSubs = _filterAndSort(subProvider.subscriptions);
 
     return Scaffold(
       appBar: AppBar(
@@ -164,24 +195,43 @@ class SubscriptionScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
+
+          // Filter Chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip('Semua (${subProvider.subscriptions.length})', SubscriptionFilter.all, isDark),
+                const SizedBox(width: 8),
+                _buildFilterChip('Aktif (${subProvider.activeSubscriptions.length})', SubscriptionFilter.active, isDark),
+                const SizedBox(width: 8),
+                _buildFilterChip('Sisa Bulan Ini ⏰', SubscriptionFilter.dueThisMonth, isDark),
+                const SizedBox(width: 8),
+                _buildFilterChip('Biaya Tertinggi 💰', SubscriptionFilter.highestCost, isDark),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
 
           Text('Daftar Langganan', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
 
-          if (subProvider.subscriptions.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
+          if (displayedSubs.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
               child: Center(
                 child: Text(
-                  'Belum ada langganan atau tagihan tetap.\nTekan tombol tambah di bawah!',
+                  _selectedFilter == SubscriptionFilter.all
+                      ? 'Belum ada langganan atau tagihan tetap.\nTekan tombol tambah di bawah!'
+                      : 'Tidak ada langganan yang cocok dengan filter.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
+                  style: const TextStyle(color: Colors.grey),
                 ),
               ),
             )
           else
-            ...subProvider.subscriptions.map((sub) {
+            ...displayedSubs.map((sub) {
               return Card(
                 margin: const EdgeInsets.only(bottom: 10),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -222,6 +272,12 @@ class SubscriptionScreen extends StatelessWidget {
                         onChanged: (_) => subProvider.toggleActive(sub),
                         activeTrackColor: isDark ? AppColors.primaryDark : AppColors.primaryLight,
                       ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                        color: AppColors.expense,
+                        onPressed: () => _confirmDelete(context, sub),
+                        tooltip: 'Hapus Langganan',
+                      ),
                     ],
                   ),
                   onLongPress: () => _confirmDelete(context, sub),
@@ -233,15 +289,37 @@ class SubscriptionScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildFilterChip(String label, SubscriptionFilter filter, bool isDark) {
+    final isSelected = _selectedFilter == filter;
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected
+              ? (isDark ? Colors.black : Colors.white)
+              : null,
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+      onSelected: (_) => setState(() => _selectedFilter = filter),
+    );
+  }
+
   void _confirmDelete(BuildContext context, SubscriptionModel sub) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Hapus Langganan?'),
-        content: Text('Yakin ingin menghapus ${sub.name}?'),
+        content: Text(
+          'Yakin ingin menghapus langganan "${sub.name}" (${CurrencyFormatter.format(sub.amount)} / ${sub.billingCycle.label})?',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.expense),
             onPressed: () {
               context.read<SubscriptionProvider>().deleteSubscription(sub.id);
               Navigator.pop(ctx);

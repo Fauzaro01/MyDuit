@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
+import '../models/receipt_data.dart';
 import '../models/transaction_model.dart';
 import '../models/transaction_template_model.dart';
 import '../models/wallet_model.dart';
@@ -809,15 +810,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Tempel atau ketik teks dari struk belanja (Indomaret, Alfamart, Starbucks, SPBU, dll). Sistem akan mengekstrak merchant, nominal, tanggal, dan kategori secara instan.',
+              'Tempel teks struk belanja (Indomaret, Alfamart, Starbucks, SPBU, resto, tagihan, dll). Mesin on-device akan mengekstrak merchant, nominal, rincian barang, pajak, diskon, dan metode pembayaran.',
               style: Theme.of(ctx).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
             TextField(
               controller: textController,
-              maxLines: 5,
+              maxLines: 6,
               decoration: const InputDecoration(
-                hintText: 'Contoh:\nINDOMARET KEMANG\n12/09/2026\nSusu UHT 20.000\nTotal Rp 45.000',
+                hintText: 'Contoh:\nINDOMARET KEMANG\n12/09/2026\n2x Susu UHT Rp 14.000\n1x Roti Tawar 15.000\nDiskon Member 2.000\nPPN 11% 2.970\nTotal Rp 29.970\nTunai Rp 50.000',
               ),
             ),
             const SizedBox(height: 16),
@@ -831,53 +832,359 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
                   icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
-                  label: const Text('Ekstrak & Terapkan'),
+                  label: const Text('Ekstrak & Periksa'),
                   onPressed: () {
                     final raw = textController.text;
                     if (raw.trim().isEmpty) return;
 
                     final parsed = ReceiptParserService.parse(raw);
-                    setState(() {
-                      if (parsed.merchantName != null &&
-                          parsed.merchantName!.isNotEmpty) {
-                        _titleController.text = parsed.merchantName!;
-                      }
-                      if (parsed.totalAmount != null &&
-                          parsed.totalAmount! > 0) {
-                        _amountController.text = CurrencyInputService.isFormatted
-                            ? RupiahInputFormatter.formatNumber(
-                                parsed.totalAmount!,
-                              )
-                            : parsed.totalAmount!.toStringAsFixed(0);
-                      }
-                      if (parsed.date != null) {
-                        _date = parsed.date!;
-                      }
-                      _type = parsed.suggestedType;
-                      _category = parsed.suggestedCategory;
-                      if (parsed.lineItems.isNotEmpty) {
-                        _noteController.text = parsed.lineItems.join('\n');
-                      }
-                    });
-
                     Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Struk berhasil diproses: ${parsed.merchantName ?? "Transaksi"} (${CurrencyFormatter.format(parsed.totalAmount ?? 0)})',
-                        ),
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    );
+                    _showReceiptPreviewSheet(context, parsed, isDark);
                   },
                 ),
               ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showReceiptPreviewSheet(
+    BuildContext context,
+    ReceiptData parsed,
+    bool isDark,
+  ) {
+    // Try auto-matching active wallet
+    WalletModel? matchedWallet;
+    if (parsed.detectedWalletKeyword != null) {
+      final walletProvider = context.read<WalletProvider>();
+      final keyword = parsed.detectedWalletKeyword!.toLowerCase();
+      try {
+        matchedWallet = walletProvider.wallets.firstWhere(
+          (w) => w.name.toLowerCase().contains(keyword),
+        );
+      } catch (_) {
+        matchedWallet = null;
+      }
+    }
+
+    final confidencePercent = (parsed.confidenceScore * 100).toInt();
+    final Color badgeColor;
+    if (parsed.confidenceScore >= 0.8) {
+      badgeColor = AppColors.income;
+    } else if (parsed.confidenceScore >= 0.5) {
+      badgeColor = Colors.orange;
+    } else {
+      badgeColor = AppColors.expense;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, scrollController) => Padding(
+          padding: const EdgeInsets.all(20),
+          child: ListView(
+            controller: scrollController,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Hasil Ekstraksi Struk',
+                          style: Theme.of(ctx).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Verifikasi data sebelum diterapkan ke form',
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          parsed.confidenceScore >= 0.8
+                              ? Icons.verified_rounded
+                              : Icons.info_outline_rounded,
+                          size: 14,
+                          color: badgeColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${parsed.confidenceLabel} ($confidencePercent%)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: badgeColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 12),
+
+              // Summary Info
+              _buildReceiptRow(
+                ctx,
+                'Merchant / Judul',
+                parsed.merchantName ?? 'Tidak terdeteksi',
+                Icons.storefront_rounded,
+              ),
+              _buildReceiptRow(
+                ctx,
+                'Total Transaksi',
+                CurrencyFormatter.format(parsed.totalAmount ?? 0),
+                Icons.payments_rounded,
+                isHighlight: true,
+              ),
+              if (parsed.subtotalAmount != null)
+                _buildReceiptRow(
+                  ctx,
+                  'Subtotal',
+                  CurrencyFormatter.format(parsed.subtotalAmount!),
+                  Icons.receipt_rounded,
+                ),
+              _buildReceiptRow(
+                ctx,
+                'Tanggal',
+                DateFormatter.fullDate(parsed.date ?? DateTime.now()),
+                Icons.calendar_today_rounded,
+              ),
+              _buildReceiptRow(
+                ctx,
+                'Kategori Disarankan',
+                parsed.suggestedCategory.label,
+                Icons.category_rounded,
+              ),
+              if (parsed.paymentMethod != null)
+                _buildReceiptRow(
+                  ctx,
+                  'Metode Pembayaran',
+                  '${parsed.paymentMethod} ${matchedWallet != null ? "→ Cocok dengan ${matchedWallet.name}" : ""}',
+                  Icons.account_balance_wallet_rounded,
+                ),
+
+              // Items breakdown
+              if (parsed.items.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Rincian Item (${parsed.items.length}):',
+                  style: Theme.of(ctx).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.cardAltDark : AppColors.cardAltLight,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: parsed.items.map((item) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.qty > 1
+                                    ? '${item.name} (${item.qty}x)'
+                                    : item.name,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            Text(
+                              CurrencyFormatter.format(item.totalPrice),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+
+              // Taxes and Discounts
+              if (parsed.discounts.isNotEmpty || parsed.taxes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                if (parsed.discounts.isNotEmpty) ...[
+                  Text(
+                    'Diskon & Promo:',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.income),
+                  ),
+                  const SizedBox(height: 4),
+                  ...parsed.discounts.map(
+                    (d) => Text(
+                      '• ${d.name} (-${CurrencyFormatter.format(d.amount)})',
+                      style: TextStyle(fontSize: 12, color: AppColors.income),
+                    ),
+                  ),
+                ],
+                if (parsed.taxes.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Pajak & Biaya:',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 4),
+                  ...parsed.taxes.map(
+                    (t) => Text(
+                      '• ${t.name} (+${CurrencyFormatter.format(t.amount)})',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ),
+                ],
+              ],
+
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Batal'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                      label: const Text('Terapkan Data'),
+                      onPressed: () {
+                        setState(() {
+                          if (parsed.merchantName != null &&
+                              parsed.merchantName!.isNotEmpty) {
+                            _titleController.text = parsed.merchantName!;
+                          }
+                          if (parsed.totalAmount != null &&
+                              parsed.totalAmount! > 0) {
+                            _amountController.text = CurrencyInputService.isFormatted
+                                ? RupiahInputFormatter.formatNumber(
+                                    parsed.totalAmount!,
+                                  )
+                                : parsed.totalAmount!.toStringAsFixed(0);
+                          }
+                          if (parsed.date != null) {
+                            _date = parsed.date!;
+                          }
+                          _type = parsed.suggestedType;
+                          _category = parsed.suggestedCategory;
+                          if (matchedWallet != null) {
+                            _selectedWallet = matchedWallet;
+                          }
+
+                          // Build itemized note
+                          final noteBuffer = StringBuffer();
+                          if (parsed.items.isNotEmpty) {
+                            noteBuffer.writeln('Rincian Belanja:');
+                            for (final itm in parsed.items) {
+                              noteBuffer.writeln('• ${itm.toString()}');
+                            }
+                          }
+                          if (parsed.discounts.isNotEmpty) {
+                            noteBuffer.writeln('\nDiskon:');
+                            for (final d in parsed.discounts) {
+                              noteBuffer.writeln('• ${d.name}');
+                            }
+                          }
+                          if (parsed.taxes.isNotEmpty) {
+                            noteBuffer.writeln('\nPajak & Layanan:');
+                            for (final t in parsed.taxes) {
+                              noteBuffer.writeln('• ${t.name}');
+                            }
+                          }
+
+                          if (noteBuffer.isNotEmpty) {
+                            _noteController.text = noteBuffer.toString().trim();
+                          }
+                        });
+
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Struk berhasil diterapkan: ${parsed.merchantName ?? "Transaksi"} (${CurrencyFormatter.format(parsed.totalAmount ?? 0)})',
+                            ),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReceiptRow(
+    BuildContext context,
+    String label,
+    String value,
+    IconData icon, {
+    bool isHighlight = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: isHighlight ? AppColors.primaryLight : Colors.grey),
+          const SizedBox(width: 8),
+          Text(
+            '$label: ',
+            style: const TextStyle(fontSize: 13, color: Colors.grey),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
+                color: isHighlight ? AppColors.primaryLight : null,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }

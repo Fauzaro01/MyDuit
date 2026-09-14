@@ -7,6 +7,7 @@ import '../providers/custom_category_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../providers/tag_provider.dart';
+import '../services/csv_export_service.dart';
 import '../utils/formatters.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/transaction_detail_sheet.dart';
@@ -243,6 +244,59 @@ class _HistoryScreenState extends State<HistoryScreen>
         provider.clearSearch();
       }
     });
+  }
+
+  void _confirmBulkDeleteMonth(
+    BuildContext context,
+    TransactionProvider provider,
+  ) {
+    final monthName =
+        DateFormatter.monthYear(provider.selectedYear, provider.selectedMonth);
+    final count = provider.transactions.length;
+    if (count == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tidak ada transaksi di bulan yang dipilih.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Transaksi Bulan Ini?'),
+        content: Text(
+          'Apakah kamu yakin ingin menghapus $count transaksi di bulan $monthName? Saldo dompet akan disesuaikan secara otomatis.\n\nTindakan ini tidak dapat dibatalkan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.expense),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final deleted = await provider.deleteTransactionsByMonth(
+                provider.selectedYear,
+                provider.selectedMonth,
+              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('$deleted transaksi berhasil dihapus.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            child: const Text('Hapus Semua'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showCategoryFilterDialog(BuildContext context) {
@@ -531,6 +585,56 @@ class _HistoryScreenState extends State<HistoryScreen>
                           ),
                           tooltip: 'Cari',
                           onPressed: () => _toggleSearch(provider),
+                        ),
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert_rounded),
+                          tooltip: 'Menu Lainnya',
+                          onSelected: (val) {
+                            if (val == 'export_csv') {
+                              final customCategories =
+                                  context.read<CustomCategoryProvider>().categories;
+                              CsvExportService.exportTransactionsToCsv(
+                                provider.transactions,
+                                wallets: wallets,
+                                customCategories: customCategories,
+                                periodLabel: DateFormatter.monthYear(
+                                  provider.selectedYear,
+                                  provider.selectedMonth,
+                                ),
+                              );
+                            } else if (val == 'bulk_delete_month') {
+                              _confirmBulkDeleteMonth(context, provider);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'export_csv',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.file_download_outlined, size: 18),
+                                  SizedBox(width: 8),
+                                  Text('Ekspor Transaksi (CSV)'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'bulk_delete_month',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.delete_sweep_outlined,
+                                    size: 18,
+                                    color: AppColors.expense,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Hapus Transaksi Bulan Ini',
+                                    style: TextStyle(color: AppColors.expense),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
