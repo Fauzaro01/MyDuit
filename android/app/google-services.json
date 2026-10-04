@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "282229922558",
+    "project_id": "zatfu-org",
+    "storage_bucket": "zatfu-org.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:282229922558:android:807bebca0af0c1299023af",
+        "android_client_info": {
+          "package_name": "com.myduit.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDgNEdir43o8eTMCkRlr_6fwSXWMkFQh0M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

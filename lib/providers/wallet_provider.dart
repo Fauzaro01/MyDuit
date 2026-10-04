@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/wallet_model.dart';
 import '../models/transfer_model.dart';
 import '../services/database_service.dart';
+import '../services/analytics_service.dart';
 
 class WalletProvider extends ChangeNotifier {
   final DatabaseService _dbService = DatabaseService();
@@ -111,6 +112,7 @@ class WalletProvider extends ChangeNotifier {
   Future<void> addWallet(WalletModel wallet) async {
     await _dbService.insertWallet(wallet);
     await loadWallets();
+    AnalyticsService.logWalletAdded();
   }
 
   Future<void> updateWallet(WalletModel wallet) async {

@@ -13,6 +13,7 @@ import '../providers/tag_provider.dart';
 import '../providers/template_provider.dart';
 import '../services/receipt_parser_service.dart';
 import '../services/auto_categorize_service.dart';
+import '../services/analytics_service.dart';
 import '../utils/formatters.dart';
 
 class AddTransactionScreen extends StatefulWidget {
@@ -1433,6 +1434,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       provider.updateTransaction(transaction);
     } else {
       provider.addTransaction(transaction);
+      AnalyticsService.logTransactionAdded(type: _type.name);
     }
 
     Navigator.pop(context);

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'config/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'providers/transaction_provider.dart';
@@ -22,6 +23,7 @@ import 'providers/asset_provider.dart';
 import 'providers/template_provider.dart';
 import 'services/notification_service.dart';
 import 'services/google_drive_service.dart';
+import 'services/analytics_service.dart';
 import 'utils/formatters.dart';
 import 'screens/main_navigation.dart';
 import 'screens/splash_screen.dart';
@@ -92,6 +94,14 @@ void main() {
         assetProvider = AssetProvider();
         templateProvider = TemplateProvider();
         await templateProvider.loadTemplates();
+
+        // Initialize analytics
+        try {
+          await Firebase.initializeApp();
+          await AnalyticsService.init();
+        } catch (_) {
+          // Non-fatal: analytics is optional
+        }
 
         // Initialize notifications
         try {
