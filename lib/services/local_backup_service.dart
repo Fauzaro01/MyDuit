@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
+import 'package:cryptography/cryptography.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -34,7 +36,7 @@ class BackupPreviewInfo {
 }
 
 class LocalBackupService {
-  /// Export all SQLite data into JSON with optional Gzip compression & XOR encryption
+  /// Export all SQLite data into JSON with optional Gzip compression & AES-GCM encryption
   static Future<String> exportToJsonString({
     String? password,
     bool compress = true,
@@ -80,32 +82,32 @@ class LocalBackupService {
     };
 
     final rawJson = jsonEncode(payload);
+    final hasPassword = password != null && password.isNotEmpty;
+    final rawBytes = utf8.encode(rawJson);
+    final bodyBytes = compress ? gzip.encode(rawBytes) : rawBytes;
 
-    if (compress) {
-      final rawBytes = utf8.encode(rawJson);
-      final compressedBytes = gzip.encode(rawBytes);
-      final finalBytes = (password != null && password.isNotEmpty)
-          ? _xorBytes(compressedBytes, password)
-          : compressedBytes;
-
+    if (hasPassword) {
+      final encrypted = await _encryptAesGcm(bodyBytes, password);
       return jsonEncode({
-        'version': 2,
-        'compressed': true,
-        'encrypted': password != null && password.isNotEmpty,
+        'version': 3,
+        'compressed': compress,
+        'encrypted': true,
         'exportedAt': DateTime.now().toIso8601String(),
-        'payload': base64Encode(finalBytes),
+        'kdf': 'pbkdf2-hmac-sha256',
+        'iterations': _kdfIterations,
+        'salt': base64Encode(encrypted.salt),
+        'nonce': base64Encode(encrypted.nonce),
+        'payload': base64Encode(encrypted.payload),
       });
     }
 
-    if (password != null && password.isNotEmpty) {
-      final rawBytes = utf8.encode(rawJson);
-      final cipherBytes = _xorBytes(rawBytes, password);
+    if (compress) {
       return jsonEncode({
-        'version': 1,
-        'encrypted': true,
-        'compressed': false,
+        'version': 2,
+        'compressed': true,
+        'encrypted': false,
         'exportedAt': DateTime.now().toIso8601String(),
-        'cipher': base64Encode(cipherBytes),
+        'payload': base64Encode(bodyBytes),
       });
     }
 
@@ -158,7 +160,7 @@ class LocalBackupService {
     String rawJson, {
     String? password,
   }) async {
-    final dataMap = _extractDataMap(rawJson, password: password);
+    final dataMap = await _extractDataMap(rawJson, password: password);
     final exportedAtStr = dataMap['exportedAt'] as String?;
 
     final data = dataMap['data'] as Map<String, dynamic>? ?? {};
@@ -177,11 +179,26 @@ class LocalBackupService {
   }
 
   /// Decode JSON string payload
-  static Map<String, dynamic> _extractDataMap(
+  static Future<Map<String, dynamic>> _extractDataMap(
     String rawJson, {
     String? password,
-  }) {
+  }) async {
     final Map<String, dynamic> parsed = jsonDecode(rawJson);
+
+    // Version 3 (AES-GCM, password-based key derivation)
+    if (parsed.containsKey('salt') && parsed.containsKey('nonce')) {
+      if (password == null || password.isEmpty) {
+        throw Exception(
+          'Password enkripsi diperlukan untuk membuka cadangan ini.',
+        );
+      }
+      final clearBytes = await _decryptAesGcm(parsed, password);
+      final decompressedBytes = parsed['compressed'] == true
+          ? gzip.decode(clearBytes)
+          : clearBytes;
+      final jsonString = utf8.decode(decompressedBytes);
+      return jsonDecode(jsonString) as Map<String, dynamic>;
+    }
 
     // Version 2 (compressed payload)
     if (parsed.containsKey('payload')) {
@@ -234,7 +251,7 @@ class LocalBackupService {
     String rawJson, {
     String? password,
   }) async {
-    final extracted = _extractDataMap(rawJson, password: password);
+    final extracted = await _extractDataMap(rawJson, password: password);
     final dataMap = extracted['data'] as Map<String, dynamic>? ?? extracted;
 
     final db = await DatabaseService().database;
@@ -411,7 +428,7 @@ class LocalBackupService {
     return true;
   }
 
-  /// Binary XOR cipher for secure offline local backup
+  /// Binary XOR cipher — legacy, kept only to read backups created before v3 (AES-GCM).
   static List<int> _xorBytes(List<int> bytes, String key) {
     if (key.isEmpty) return bytes;
     final keyBytes = utf8.encode(key);
@@ -421,5 +438,58 @@ class LocalBackupService {
       output[i] = bytes[i] ^ keyBytes[i % keyBytes.length];
     }
     return output;
+  }
+
+  static const _kdfIterations = 100000;
+  static final _secureRandom = Random.secure();
+
+  /// Password-based AES-256-GCM encryption. Key is derived per-export via PBKDF2
+  /// with a random salt, so the same password never produces the same key twice.
+  static Future<({List<int> salt, List<int> nonce, List<int> payload})> _encryptAesGcm(
+    List<int> bytes,
+    String password,
+  ) async {
+    final salt = List<int>.generate(16, (_) => _secureRandom.nextInt(256));
+    final secretKey = await Pbkdf2(
+      macAlgorithm: Hmac.sha256(),
+      iterations: _kdfIterations,
+      bits: 256,
+    ).deriveKeyFromPassword(password: password, nonce: salt);
+    final secretBox = await AesGcm.with256bits().encrypt(bytes, secretKey: secretKey);
+    return (
+      salt: salt,
+      nonce: secretBox.nonce,
+      payload: secretBox.cipherText + secretBox.mac.bytes,
+    );
+  }
+
+  static Future<List<int>> _decryptAesGcm(
+    Map<String, dynamic> parsed,
+    String password,
+  ) async {
+    final salt = base64Decode(parsed['salt'] as String);
+    final nonce = base64Decode(parsed['nonce'] as String);
+    final iterations = parsed['iterations'] as int? ?? _kdfIterations;
+    final payloadBytes = base64Decode(parsed['payload'] as String);
+    if (payloadBytes.length < 16) {
+      throw Exception('Password salah atau berkas cadangan rusak.');
+    }
+    final cipherText = payloadBytes.sublist(0, payloadBytes.length - 16);
+    final mac = Mac(payloadBytes.sublist(payloadBytes.length - 16));
+
+    final secretKey = await Pbkdf2(
+      macAlgorithm: Hmac.sha256(),
+      iterations: iterations,
+      bits: 256,
+    ).deriveKeyFromPassword(password: password, nonce: salt);
+
+    try {
+      return await AesGcm.with256bits().decrypt(
+        SecretBox(cipherText, nonce: nonce, mac: mac),
+        secretKey: secretKey,
+      );
+    } catch (_) {
+      throw Exception('Password salah atau berkas cadangan rusak.');
+    }
   }
 }
