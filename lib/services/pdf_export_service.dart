@@ -16,8 +16,9 @@ class _PdfCategoryItem {
 class PdfExportService {
   static Future<void> exportAndShare(
     List<TransactionModel> transactions, {
-    required int year,
-    required int month,
+    int? year,
+    int? month,
+    String? title,
     required double totalIncome,
     required double totalExpense,
     required Map<TransactionCategory, double> expenseCategoryTotals,
@@ -25,7 +26,7 @@ class PdfExportService {
     Map<String, String>? customCategoryNames,
   }) async {
     final pdf = pw.Document();
-    final monthName = DateFormatter.monthYear(year, month);
+    final headerTitle = title ?? (year != null && month != null ? DateFormatter.monthYear(year, month) : 'Laporan Transaksi');
 
     final categoryItems = _buildCategoryItems(
       expenseCategoryTotals,
@@ -37,7 +38,7 @@ class PdfExportService {
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
-        header: (context) => _buildHeader(monthName),
+        header: (context) => _buildHeader(headerTitle),
         footer: (context) => _buildFooter(context),
         build: (context) => [
           // Summary
@@ -57,13 +58,13 @@ class PdfExportService {
     );
 
     final dir = await getApplicationDocumentsDirectory();
-    final fileName = 'MyDuit_${monthName.replaceAll(' ', '_')}.pdf';
+    final fileName = 'MyDuit_${headerTitle.replaceAll(' ', '_')}.pdf';
     final file = File('${dir.path}/$fileName');
     await file.writeAsBytes(await pdf.save());
 
     await Share.shareXFiles([
       XFile(file.path),
-    ], text: 'Laporan Keuangan MyDuit - $monthName');
+    ], text: 'Laporan Keuangan MyDuit - $headerTitle');
   }
 
   static Future<void> printReport(

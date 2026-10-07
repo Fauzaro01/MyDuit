@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
+import '../models/transaction_model.dart';
 import '../models/wallet_model.dart';
+import '../providers/custom_category_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../services/csv_export_service.dart';
+import '../services/database_service.dart';
+import '../services/pdf_export_service.dart';
 import '../utils/formatters.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import 'transfer_screen.dart';
@@ -90,6 +95,8 @@ class WalletScreen extends StatelessWidget {
                             onTap: () => walletProvider.setActiveWallet(wallet),
                             onEdit: () =>
                                 _showEditWalletDialog(context, wallet),
+                            onExport: () =>
+                                _showExportWalletSheet(context, wallet),
                             onDelete: wallet.isDefault
                                 ? null
                                 : () => _confirmDeleteWallet(context, wallet),
@@ -401,6 +408,225 @@ class WalletScreen extends StatelessWidget {
     );
   }
 
+  void _showExportWalletSheet(BuildContext context, WalletModel wallet) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    String selectedPeriod = 'all'; // 'all', 'this_month', 'last_30_days'
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Text(
+                        wallet.emoji,
+                        style: const TextStyle(fontSize: 24),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Ekspor Transaksi: ${wallet.name}',
+                              style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                            Text(
+                              'Unduh atau bagikan riwayat transaksi dompet ini',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark ? Colors.white60 : Colors.black54,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Pilih Rentang Waktu',
+                    style: Theme.of(ctx).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Semua'),
+                        selected: selectedPeriod == 'all',
+                        onSelected: (_) => setSheetState(() => selectedPeriod = 'all'),
+                      ),
+                      ChoiceChip(
+                        label: const Text('Bulan Ini'),
+                        selected: selectedPeriod == 'this_month',
+                        onSelected: (_) => setSheetState(() => selectedPeriod = 'this_month'),
+                      ),
+                      ChoiceChip(
+                        label: const Text('30 Hari Terakhir'),
+                        selected: selectedPeriod == 'last_30_days',
+                        onSelected: (_) => setSheetState(() => selectedPeriod = 'last_30_days'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.table_chart_rounded),
+                          label: const Text('Ekspor CSV'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          onPressed: () async {
+                            final nav = Navigator.of(ctx);
+                            final rootCtx = context;
+                            final db = DatabaseService();
+                            final allTxs = await db.getTransactionsByWallet(wallet.id);
+
+                            final now = DateTime.now();
+                            List<TransactionModel> filteredTxs = allTxs;
+                            String periodLabel = 'Semua';
+
+                            if (selectedPeriod == 'this_month') {
+                              filteredTxs = allTxs.where((t) => t.date.year == now.year && t.date.month == now.month).toList();
+                              periodLabel = DateFormatter.monthYear(now.year, now.month);
+                            } else if (selectedPeriod == 'last_30_days') {
+                              final thirtyDaysAgo = now.subtract(const Duration(days: 30));
+                              filteredTxs = allTxs.where((t) => t.date.isAfter(thirtyDaysAgo)).toList();
+                              periodLabel = '30 Hari Terakhir';
+                            }
+
+                            if (filteredTxs.isEmpty) {
+                              if (rootCtx.mounted) {
+                                ScaffoldMessenger.of(rootCtx).showSnackBar(
+                                  const SnackBar(content: Text('Tidak ada transaksi pada periode yang dipilih.')),
+                                );
+                              }
+                              nav.pop();
+                              return;
+                            }
+
+                            final customCatProvider = rootCtx.read<CustomCategoryProvider>();
+                            final walletProvider = rootCtx.read<WalletProvider>();
+
+                            nav.pop();
+                            await CsvExportService.exportTransactionsToCsv(
+                              filteredTxs,
+                              wallets: walletProvider.wallets,
+                              customCategories: customCatProvider.categories,
+                              periodLabel: '(${wallet.name} - $periodLabel)',
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          icon: const Icon(Icons.picture_as_pdf_rounded),
+                          label: const Text('Ekspor PDF'),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: AppColors.income,
+                          ),
+                          onPressed: () async {
+                            final nav = Navigator.of(ctx);
+                            final rootCtx = context;
+                            final db = DatabaseService();
+                            final allTxs = await db.getTransactionsByWallet(wallet.id);
+
+                            final now = DateTime.now();
+                            List<TransactionModel> filteredTxs = allTxs;
+                            String periodLabel = 'Semua';
+
+                            if (selectedPeriod == 'this_month') {
+                              filteredTxs = allTxs.where((t) => t.date.year == now.year && t.date.month == now.month).toList();
+                              periodLabel = DateFormatter.monthYear(now.year, now.month);
+                            } else if (selectedPeriod == 'last_30_days') {
+                              final thirtyDaysAgo = now.subtract(const Duration(days: 30));
+                              filteredTxs = allTxs.where((t) => t.date.isAfter(thirtyDaysAgo)).toList();
+                              periodLabel = '30 Hari Terakhir';
+                            }
+
+                            if (filteredTxs.isEmpty) {
+                              if (rootCtx.mounted) {
+                                ScaffoldMessenger.of(rootCtx).showSnackBar(
+                                  const SnackBar(content: Text('Tidak ada transaksi pada periode yang dipilih.')),
+                                );
+                              }
+                              nav.pop();
+                              return;
+                            }
+
+                            final customCatProvider = rootCtx.read<CustomCategoryProvider>();
+                            final customMap = {for (final c in customCatProvider.categories) c.id: c.name};
+
+                            double income = 0;
+                            double expense = 0;
+                            final Map<TransactionCategory, double> catTotals = {};
+
+                            for (final t in filteredTxs) {
+                              if (t.type == TransactionType.income) {
+                                income += t.amount;
+                              } else {
+                                expense += t.amount;
+                                catTotals[t.category] = (catTotals[t.category] ?? 0.0) + t.amount;
+                              }
+                            }
+
+                            nav.pop();
+                            await PdfExportService.exportAndShare(
+                              filteredTxs,
+                              title: 'Laporan ${wallet.name} ($periodLabel)',
+                              totalIncome: income,
+                              totalExpense: expense,
+                              expenseCategoryTotals: catTotals,
+                              customCategoryNames: customMap,
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _confirmDeleteWallet(BuildContext context, WalletModel wallet) {
     final walletProvider = context.read<WalletProvider>();
     final balance = walletProvider.walletBalances[wallet.id] ?? 0.0;
@@ -511,6 +737,7 @@ class _WalletCard extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
   final VoidCallback onEdit;
+  final VoidCallback onExport;
   final VoidCallback? onDelete;
 
   const _WalletCard({
@@ -520,6 +747,7 @@ class _WalletCard extends StatelessWidget {
     required this.isActive,
     required this.onTap,
     required this.onEdit,
+    required this.onExport,
     required this.onDelete,
   });
 
@@ -630,6 +858,7 @@ class _WalletCard extends StatelessWidget {
             PopupMenuButton<String>(
               onSelected: (value) {
                 if (value == 'edit') onEdit();
+                if (value == 'export') onExport();
                 if (value == 'delete') onDelete?.call();
               },
               itemBuilder: (context) => [
@@ -640,6 +869,16 @@ class _WalletCard extends StatelessWidget {
                       Icon(Icons.edit_outlined, size: 18),
                       SizedBox(width: 8),
                       Text('Edit'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'export',
+                  child: Row(
+                    children: [
+                      Icon(Icons.file_download_outlined, size: 18),
+                      SizedBox(width: 8),
+                      Text('Ekspor Transaksi'),
                     ],
                   ),
                 ),

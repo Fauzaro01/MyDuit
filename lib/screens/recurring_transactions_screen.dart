@@ -26,9 +26,35 @@ class _RecurringTransactionsScreenState
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<RecurringProvider>().loadRecurringTransactions();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final recurringProvider = context.read<RecurringProvider>();
+      final generatedCount = await recurringProvider.generatePendingTransactions();
+      if (mounted && generatedCount > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '$generatedCount transaksi berulang berhasil dicatat otomatis',
+            ),
+            backgroundColor: AppColors.income,
+          ),
+        );
+      }
     });
+  }
+
+  Future<void> _syncManually() async {
+    final recurringProvider = context.read<RecurringProvider>();
+    final count = await recurringProvider.generatePendingTransactions();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          count > 0
+              ? '$count transaksi berulang baru dicatat'
+              : 'Semua transaksi berulang sudah termutakhir',
+        ),
+      ),
+    );
   }
 
   @override
@@ -44,6 +70,11 @@ class _RecurringTransactionsScreenState
       appBar: AppBar(
         title: const Text('Transaksi Berulang'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.sync_rounded),
+            tooltip: 'Sinkronkan Sekarang',
+            onPressed: _syncManually,
+          ),
           IconButton(
             icon: const Icon(Icons.info_outline_rounded),
             onPressed: () => _showInfoDialog(context),

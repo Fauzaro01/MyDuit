@@ -1,6 +1,10 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/subscription_model.dart';
+import '../models/transaction_model.dart';
 import '../services/database_service.dart';
+import '../services/notification_service.dart';
+import 'transaction_provider.dart';
 
 class SubscriptionProvider with ChangeNotifier {
   final DatabaseService _db = DatabaseService();
@@ -34,6 +38,9 @@ class SubscriptionProvider with ChangeNotifier {
   Future<void> addSubscription(SubscriptionModel sub) async {
     await _db.insertSubscription(sub);
     _subscriptions.insert(0, sub);
+    if (sub.isActive) {
+      await NotificationService.scheduleSubscriptionReminder(sub);
+    }
     notifyListeners();
   }
 
@@ -42,6 +49,11 @@ class SubscriptionProvider with ChangeNotifier {
     final idx = _subscriptions.indexWhere((s) => s.id == sub.id);
     if (idx != -1) {
       _subscriptions[idx] = sub;
+      if (sub.isActive) {
+        await NotificationService.scheduleSubscriptionReminder(sub);
+      } else {
+        await NotificationService.cancelSubscriptionReminder(sub.id);
+      }
       notifyListeners();
     }
   }
@@ -49,11 +61,32 @@ class SubscriptionProvider with ChangeNotifier {
   Future<void> deleteSubscription(String id) async {
     await _db.deleteSubscription(id);
     _subscriptions.removeWhere((s) => s.id == id);
+    await NotificationService.cancelSubscriptionReminder(id);
     notifyListeners();
   }
 
   Future<void> toggleActive(SubscriptionModel sub) async {
     final updated = sub.copyWith(isActive: !sub.isActive);
     await updateSubscription(updated);
+  }
+
+  Future<void> paySubscription(
+    SubscriptionModel sub, {
+    required String walletId,
+    required BuildContext context,
+    String? note,
+  }) async {
+    final tx = TransactionModel(
+      title: 'Langganan: ${sub.name}',
+      amount: sub.amount,
+      type: TransactionType.expense,
+      category: sub.category,
+      date: DateTime.now(),
+      walletId: walletId,
+      note: note ?? sub.notes ?? 'Pembayaran langganan ${sub.name}',
+    );
+
+    final txProvider = Provider.of<TransactionProvider>(context, listen: false);
+    await txProvider.addTransaction(tx);
   }
 }

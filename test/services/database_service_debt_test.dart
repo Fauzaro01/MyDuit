@@ -125,4 +125,39 @@ void main() {
       expect(rows.single['debtId'], isNull);
     });
   });
+
+  group('DatabaseService.toggleSplitParticipantPaid bidirectional reconciliation', () {
+    test('marking participant paid updates linked debt to settled', () async {
+      final dbService = DatabaseService();
+      final debt = DebtModel(
+        personName: 'Dewi',
+        amount: 75000,
+        type: DebtType.owedToMe,
+      );
+      await dbService.insertDebt(debt);
+
+      final participant = SplitParticipant(
+        id: 'part-dewi',
+        billId: 'bill-z',
+        name: 'Dewi',
+        amount: 75000,
+        debtId: debt.id,
+        isPaid: false,
+      );
+      final bill = SplitBillModel(
+        id: 'bill-z',
+        title: 'Lunch',
+        totalAmount: 75000,
+        participants: [participant],
+      );
+      await dbService.insertSplitBill(bill);
+
+      await dbService.toggleSplitParticipantPaid('part-dewi', true);
+
+      final debts = await dbService.getAllDebts();
+      final updatedDebt = debts.firstWhere((d) => d.id == debt.id);
+      expect(updatedDebt.isSettled, isTrue);
+      expect(updatedDebt.paidAmount, 75000);
+    });
+  });
 }
