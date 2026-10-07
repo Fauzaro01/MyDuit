@@ -54,6 +54,8 @@ dependencies:
   url_launcher: ^6.3.2
   firebase_core: ^4.15.0
   firebase_analytics: ^12.6.0
+  firebase_crashlytics: ^5.4.0
+  home_widget: ^0.10.0
 
 dev_dependencies:
   flutter_test:
