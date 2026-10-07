@@ -55,8 +55,8 @@ class SettingsScreen extends StatelessWidget {
           Text('Pengaturan', style: theme.textTheme.headlineMedium),
           const SizedBox(height: 24),
 
-          // Features section
-          _SectionHeader(title: 'Fitur'),
+          // Features — grouped by purpose so the long flat list is scannable
+          _SectionHeader(title: 'Pencatatan & Transaksi'),
           const SizedBox(height: 12),
           _SettingsCard(
             isDark: isDark,
@@ -88,23 +88,99 @@ class SettingsScreen extends StatelessWidget {
               ),
               const Divider(height: 1, indent: 56),
               _SettingsTile(
-                icon: Icons.file_download_outlined,
-                title: 'Ekspor Data',
-                subtitle: 'Bagikan laporan keuangan (CSV/PDF)',
-                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
-                onTap: () => _showExportDialog(context),
-              ),
-              const Divider(height: 1, indent: 56),
-              _SettingsTile(
-                icon: Icons.emoji_events_outlined,
-                title: 'Pencapaian & Streak',
-                subtitle: 'Pelacak konsistensi & koleksi medali',
+                icon: Icons.repeat_rounded,
+                title: 'Transaksi Berulang',
+                subtitle: 'Otomatiskan tagihan & pemasukan',
                 trailing: const Icon(Icons.chevron_right_rounded, size: 22),
                 onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const BadgesScreen(),
+                      builder: (_) => const RecurringTransactionsScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.category_rounded,
+                title: 'Kategori Kustom',
+                subtitle: 'Buat kategori sesuai kebutuhanmu',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const CustomCategoriesScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.call_split_rounded,
+                title: 'Bagi Tagihan (Split Bill)',
+                subtitle: 'Patungan acara & pembagian rata/custom',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SplitBillScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
+
+          const SizedBox(height: 24),
+
+          _SectionHeader(title: 'Analisis & Laporan'),
+          const SizedBox(height: 12),
+          _SettingsCard(
+            isDark: isDark,
+            children: [
+              _SettingsTile(
+                icon: Icons.health_and_safety_outlined,
+                title: 'Kesehatan Finansial',
+                subtitle: 'Analisis skor 50/30/20 & proyeksi saldo',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const FinancialHealthScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.account_balance_rounded,
+                title: 'Kekayaan Bersih (Net Worth)',
+                subtitle: 'Portofolio aset investasi, kas & kewajiban',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const NetWorthScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.calendar_month_rounded,
+                title: 'Kalender Finansial & Heatmap',
+                subtitle: 'Peta intensitas belanja & tanggal jatuh tempo',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const FinancialCalendarScreen(),
                     ),
                   );
                 },
@@ -126,20 +202,44 @@ class SettingsScreen extends StatelessWidget {
               ),
               const Divider(height: 1, indent: 56),
               _SettingsTile(
-                icon: Icons.repeat_rounded,
-                title: 'Transaksi Berulang',
-                subtitle: 'Otomatiskan tagihan & pemasukan',
+                icon: Icons.emoji_events_outlined,
+                title: 'Pencapaian & Streak',
+                subtitle: 'Pelacak konsistensi & koleksi medali',
                 trailing: const Icon(Icons.chevron_right_rounded, size: 22),
                 onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const RecurringTransactionsScreen(),
+                      builder: (_) => const BadgesScreen(),
                     ),
                   );
                 },
               ),
               const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.auto_awesome_rounded,
+                title: 'AI Financial Advisor',
+                subtitle: 'Deteksi anomali belanja & insight cerdas',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const FinancialAdvisorScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
+
+          const SizedBox(height: 24),
+
+          _SectionHeader(title: 'Perencanaan'),
+          const SizedBox(height: 12),
+          _SettingsCard(
+            isDark: isDark,
+            children: [
               _SettingsTile(
                 icon: Icons.savings_rounded,
                 title: 'Tujuan Tabungan',
@@ -169,81 +269,6 @@ class SettingsScreen extends StatelessWidget {
               ),
               const Divider(height: 1, indent: 56),
               _SettingsTile(
-                icon: Icons.category_rounded,
-                title: 'Kategori Kustom',
-                subtitle: 'Buat kategori sesuai kebutuhanmu',
-                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const CustomCategoriesScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 1, indent: 56),
-              _SettingsTile(
-                icon: Icons.health_and_safety_outlined,
-                title: 'Kesehatan Finansial',
-                subtitle: 'Analisis skor 50/30/20 & proyeksi saldo',
-                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const FinancialHealthScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 1, indent: 56),
-              _SettingsTile(
-                icon: Icons.call_split_rounded,
-                title: 'Bagi Tagihan (Split Bill)',
-                subtitle: 'Patungan acara & pembagian rata/custom',
-                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const SplitBillScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 1, indent: 56),
-              _SettingsTile(
-                icon: Icons.file_upload_outlined,
-                title: 'Impor Mutasi Bank & CSV',
-                subtitle: 'BCA, Mandiri, BRI & Universal CSV',
-                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const DataMigrationScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 1, indent: 56),
-              _SettingsTile(
-                icon: Icons.calendar_month_rounded,
-                title: 'Kalender Finansial & Heatmap',
-                subtitle: 'Peta intensitas belanja & tanggal jatuh tempo',
-                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const FinancialCalendarScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 1, indent: 56),
-              _SettingsTile(
                 icon: Icons.subscriptions_rounded,
                 title: 'Langganan & Beban Tetap',
                 subtitle: 'Pantau tagihan rutin & rasio biaya tetap',
@@ -257,47 +282,58 @@ class SettingsScreen extends StatelessWidget {
                   );
                 },
               ),
-              const Divider(height: 1, indent: 56),
-              _SettingsTile(
-                icon: Icons.account_balance_rounded,
-                title: 'Kekayaan Bersih (Net Worth)',
-                subtitle: 'Portofolio aset investasi, kas & kewajiban',
-                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const NetWorthScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 1, indent: 56),
-              _SettingsTile(
-                icon: Icons.auto_awesome_rounded,
-                title: 'AI Financial Advisor',
-                subtitle: 'Deteksi anomali belanja & insight cerdas',
-                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const FinancialAdvisorScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 1, indent: 56),
+            ],
+          ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
+
+          const SizedBox(height: 24),
+
+          _SectionHeader(title: 'Alat Bantu'),
+          const SizedBox(height: 12),
+          _SettingsCard(
+            isDark: isDark,
+            children: [
               _SettingsTile(
                 icon: Icons.calculate_rounded,
                 title: 'Kalkulator Finansial',
-                subtitle: 'Simulasi bunga majemuk, pinjaman KPR, dana darurat & FIRE',
+                subtitle: 'Simulasi mandiri — bunga majemuk, KPR, dana darurat & FIRE',
                 trailing: const Icon(Icons.chevron_right_rounded, size: 22),
                 onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => const FinancialCalculatorScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
+
+          const SizedBox(height: 24),
+
+          _SectionHeader(title: 'Data & Backup'),
+          const SizedBox(height: 12),
+          _SettingsCard(
+            isDark: isDark,
+            children: [
+              _SettingsTile(
+                icon: Icons.file_download_outlined,
+                title: 'Ekspor Data',
+                subtitle: 'Bagikan laporan keuangan (CSV/PDF)',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () => _showExportDialog(context),
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.file_upload_outlined,
+                title: 'Impor Mutasi Bank & CSV',
+                subtitle: 'BCA, Mandiri, BRI & Universal CSV',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const DataMigrationScreen(),
                     ),
                   );
                 },
