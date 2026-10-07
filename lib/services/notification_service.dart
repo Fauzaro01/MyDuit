@@ -5,6 +5,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import '../models/subscription_model.dart';
 import '../models/debt_model.dart';
+import '../models/savings_goal_model.dart';
 import '../utils/formatters.dart';
 
 class NotificationService {
@@ -256,5 +257,59 @@ class NotificationService {
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       );
     }
+  }
+
+  /// Cancel a previously scheduled debt due-date reminder (e.g. debt paid off or deleted).
+  static Future<void> cancelDebtReminder(String debtId) async {
+    final notifId = 60000 + (debtId.hashCode % 30000).abs();
+    await _plugin.cancel(id: notifId);
+  }
+
+  /// Schedule upcoming savings goal deadline reminder
+  static Future<void> scheduleSavingsReminder(SavingsGoalModel goal) async {
+    if (goal.isCompleted || goal.targetDate == null) return;
+    final notifId = 90000 + (goal.id.hashCode % 9999).abs();
+
+    const androidDetails = AndroidNotificationDetails(
+      'myduit_savings',
+      'Pengingat Target Tabungan',
+      channelDescription: 'Pengingat tanggal target tujuan tabungan',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(),
+    );
+
+    final due = goal.targetDate!;
+    final reminderDate = due.subtract(const Duration(days: 1));
+    final scheduledDate = tz.TZDateTime(
+      tz.local,
+      reminderDate.year,
+      reminderDate.month,
+      reminderDate.day,
+      9,
+      0,
+    );
+
+    if (scheduledDate.isAfter(tz.TZDateTime.now(tz.local))) {
+      await _plugin.zonedSchedule(
+        id: notifId,
+        title: 'Pengingat Target Tabungan 🎯',
+        body: 'Target ${goal.title} (sisa ${CurrencyFormatter.format(goal.remainingAmount)}) jatuh tempo besok.',
+        scheduledDate: scheduledDate,
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+    }
+  }
+
+  /// Cancel a previously scheduled savings goal reminder (e.g. goal funded or deleted).
+  static Future<void> cancelSavingsReminder(String goalId) async {
+    final notifId = 90000 + (goalId.hashCode % 9999).abs();
+    await _plugin.cancel(id: notifId);
   }
 }

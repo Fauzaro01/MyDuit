@@ -43,6 +43,23 @@ class SavingsGoalModel {
     return (remainingAmount / avgPerDay).ceil();
   }
 
+  /// Target date has passed and the goal still isn't funded.
+  bool get isOverdue =>
+      !isReached &&
+      targetDate != null &&
+      targetDate!.isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day));
+
+  /// Monthly deposit needed to reach the target by its deadline. Null if
+  /// already reached, there's no deadline, or the deadline already passed.
+  double? get suggestedMonthlyAmount {
+    if (isReached || targetDate == null) return null;
+    final now = DateTime.now();
+    if (targetDate!.isBefore(now)) return null;
+    final months = ((targetDate!.year - now.year) * 12 + (targetDate!.month - now.month))
+        .clamp(1, 99999);
+    return remainingAmount / months;
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,

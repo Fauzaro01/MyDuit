@@ -134,17 +134,18 @@ class AutoAllocationEngine {
         );
       }
 
-      // If leftover, distribute to first goal
+      // If leftover, top up the first goal — but never push it past its target.
       if (remainingDeposit > 0 && results.isNotEmpty) {
         final first = results.first;
+        final room = (first.targetAmount - first.newCurrentAmount).clamp(0.0, remainingDeposit);
         results[0] = AllocationResult(
           goalId: first.goalId,
           goalTitle: first.goalTitle,
           emoji: first.emoji,
-          allocatedAmount: first.allocatedAmount + remainingDeposit,
-          newCurrentAmount: first.newCurrentAmount + remainingDeposit,
+          allocatedAmount: first.allocatedAmount + room,
+          newCurrentAmount: first.newCurrentAmount + room,
           targetAmount: first.targetAmount,
-          willComplete: true,
+          willComplete: (first.newCurrentAmount + room) >= first.targetAmount,
         );
       }
     }

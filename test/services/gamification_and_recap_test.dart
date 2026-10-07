@@ -60,6 +60,7 @@ void main() {
           targetAmount: 5000000,
           currentAmount: 5000000,
           targetDate: now.add(const Duration(days: 30)),
+          isCompleted: true,
         ),
       ];
       final debts = [

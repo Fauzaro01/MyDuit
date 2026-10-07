@@ -61,36 +61,28 @@ class DebtProvider extends ChangeNotifier {
     await loadDebts();
   }
 
-  Future<void> addPayment(
+  /// Records a payment. Returns true if this payment just fully settled the debt.
+  Future<bool> addPayment(
     String debtId,
     double amount, {
     String? note,
     DateTime? date,
   }) async {
-    if (amount <= 0) return;
+    if (amount <= 0) return false;
     final debt = _debts.where((d) => d.id == debtId).firstOrNull;
-    if (debt == null || debt.isSettled) return;
+    if (debt == null || debt.isSettled) return false;
 
-    final effectivePayment = amount > debt.remainingAmount ? debt.remainingAmount : amount;
-    await _dbService.addDebtPayment(
+    final justSettled = await _dbService.addDebtPayment(
       debtId,
-      effectivePayment,
+      amount,
       note: note,
       date: date,
     );
-    if (debt.paidAmount + effectivePayment >= debt.amount) {
-      await _dbService.updateDebt(debt.copyWith(isSettled: true, paidAmount: debt.amount));
-    }
     await loadDebts();
+    return justSettled;
   }
 
   Future<List<DebtPaymentModel>> getPaymentsForDebt(String debtId) async {
     return _dbService.getDebtPayments(debtId);
-  }
-
-  Future<void> settleDebt(DebtModel debt) async {
-    final updated = debt.copyWith(isSettled: true, paidAmount: debt.amount);
-    await _dbService.updateDebt(updated);
-    await loadDebts();
   }
 }

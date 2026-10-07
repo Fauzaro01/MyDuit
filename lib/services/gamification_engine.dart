@@ -147,7 +147,7 @@ class GamificationEngine {
     );
 
     // 6. Goal Achiever - Menyelesaikan minimal 1 target tabungan
-    final completedGoals = savingsGoals.where((g) => g.currentAmount >= g.targetAmount).length;
+    final completedGoals = savingsGoals.where((g) => g.isCompleted).length;
     badges.add(
       FinancialBadge(
         id: 'goal_achiever',
