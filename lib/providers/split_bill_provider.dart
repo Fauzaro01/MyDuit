@@ -50,8 +50,9 @@ class SplitBillProvider extends ChangeNotifier {
 
   Future<void> toggleParticipantPaid(
     String billId,
-    String participantId,
-  ) async {
+    String participantId, {
+    DebtProvider? debtProvider,
+  }) async {
     final billIndex = _bills.indexWhere((b) => b.id == billId);
     if (billIndex == -1) return;
 
@@ -76,6 +77,7 @@ class SplitBillProvider extends ChangeNotifier {
     }
 
     await loadBills();
+    await debtProvider?.loadDebts();
   }
 
   Future<void> toggleSettleBill(String billId) async {
@@ -110,8 +112,13 @@ class SplitBillProvider extends ChangeNotifier {
   }
 
   /// Mark all participants of a bill as paid or unpaid
-  Future<void> setAllParticipantsPaid(String billId, bool isPaid) async {
+  Future<void> setAllParticipantsPaid(
+    String billId,
+    bool isPaid, {
+    DebtProvider? debtProvider,
+  }) async {
     await _dbService.setAllSplitParticipantsPaid(billId, isPaid);
     await loadBills();
+    await debtProvider?.loadDebts();
   }
 }

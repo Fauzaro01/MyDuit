@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../models/subscription_model.dart';
 import '../models/transaction_model.dart';
+import '../models/wallet_model.dart';
 import '../providers/subscription_provider.dart';
 import '../providers/transaction_provider.dart';
+import '../providers/wallet_provider.dart';
 import '../services/subscription_analyzer_service.dart';
 import '../utils/formatters.dart';
 
@@ -273,6 +275,12 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         activeTrackColor: isDark ? AppColors.primaryDark : AppColors.primaryLight,
                       ),
                       IconButton(
+                        icon: const Icon(Icons.payment_rounded, size: 20),
+                        color: AppColors.income,
+                        onPressed: () => _showPaySubscriptionSheet(context, sub),
+                        tooltip: 'Bayar Sekarang',
+                      ),
+                      IconButton(
                         icon: const Icon(Icons.delete_outline_rounded, size: 20),
                         color: AppColors.expense,
                         onPressed: () => _confirmDelete(context, sub),
@@ -305,6 +313,215 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       selected: isSelected,
       selectedColor: isDark ? AppColors.primaryDark : AppColors.primaryLight,
       onSelected: (_) => setState(() => _selectedFilter = filter),
+    );
+  }
+
+  void _showPaySubscriptionSheet(BuildContext context, SubscriptionModel sub) {
+    final walletProvider = context.read<WalletProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (walletProvider.wallets.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Belum ada dompet tersedia.')),
+      );
+      return;
+    }
+
+    String selectedWalletId = sub.walletId != null &&
+            walletProvider.wallets.any((w) => w.id == sub.walletId)
+        ? sub.walletId!
+        : (walletProvider.activeWallet?.id ?? walletProvider.wallets.first.id);
+
+    final noteController = TextEditingController(
+      text: 'Bayar langganan ${sub.name}',
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final selectedWallet = walletProvider.getWalletById(selectedWalletId);
+            final currentBal = walletProvider.walletBalances[selectedWalletId] ?? 0.0;
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Bayar Langganan',
+                    style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Catat transaksi pengeluaran langsung untuk ${sub.name}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.cardDark : AppColors.cardLight,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isDark ? Colors.white10 : Colors.black12,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              sub.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            Text(
+                              '${sub.billingCycle.label} • ${sub.category.label}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          CurrencyFormatter.format(sub.amount),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: AppColors.expense,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedWalletId,
+                    decoration: const InputDecoration(
+                      labelText: 'Pilih Dompet Sumber',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                    ),
+                    items: walletProvider.wallets.map((w) {
+                      final bal = walletProvider.walletBalances[w.id] ?? 0.0;
+                      return DropdownMenuItem(
+                        value: w.id,
+                        child: Text(
+                          '${w.emoji} ${w.name} (${CurrencyFormatter.format(bal)})',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setSheetState(() => selectedWalletId = val);
+                      }
+                    },
+                  ),
+                  if (currentBal < sub.amount) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          size: 16,
+                          color: AppColors.expense,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Saldo dompet (${CurrencyFormatter.format(currentBal)}) kurang dari tagihan.',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.expense,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: noteController,
+                    decoration: const InputDecoration(
+                      labelText: 'Catatan Transaksi',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.note_alt_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.check_circle_rounded),
+                      label: Text(
+                        'Konfirmasi Bayar ${CurrencyFormatter.format(sub.amount)}',
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.income,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: () async {
+                        final subProvider = context.read<SubscriptionProvider>();
+                        await subProvider.paySubscription(
+                          sub,
+                          walletId: selectedWalletId,
+                          context: context,
+                          note: noteController.text.trim(),
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Pembayaran langganan "${sub.name}" tercatat di dompet ${selectedWallet?.name ?? ""}',
+                              ),
+                              backgroundColor: AppColors.income,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

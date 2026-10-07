@@ -211,6 +211,12 @@ class NotificationService {
     }
   }
 
+  /// Cancel a previously scheduled subscription reminder
+  static Future<void> cancelSubscriptionReminder(String subId) async {
+    final notifId = 70000 + (subId.hashCode % 20000).abs();
+    await _plugin.cancel(id: notifId);
+  }
+
   /// Schedule upcoming debt due date reminder
   static Future<void> scheduleDebtReminder(DebtModel debt) async {
     if (debt.isSettled || debt.dueDate == null) return;

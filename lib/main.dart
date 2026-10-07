@@ -103,6 +103,15 @@ void main() {
         templateProvider = TemplateProvider();
         templateProvider.loadTemplates(); // Deferred: same reason
 
+        // Auto-generate due recurring transactions (deferred, non-fatal)
+        unawaited(() async {
+          try {
+            await recurringProvider?.generatePendingTransactions();
+          } catch (_) {
+            // Non-fatal
+          }
+        }());
+
         // Initialize analytics + crash reporting (deferred, non-fatal)
         unawaited(() async {
           try {

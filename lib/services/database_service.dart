@@ -664,6 +664,17 @@ class DatabaseService {
     return getTransactionsByDateRange(start, end);
   }
 
+  Future<List<TransactionModel>> getTransactionsByWallet(String walletId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'transactions',
+      where: 'walletId = ?',
+      whereArgs: [walletId],
+      orderBy: 'isPinned DESC, date DESC',
+    );
+    return List.generate(maps.length, (i) => TransactionModel.fromMap(maps[i]));
+  }
+
   Future<List<TransactionModel>> getTransactionsByWalletAndMonth(
     String walletId,
     int year,
@@ -1343,12 +1354,45 @@ class DatabaseService {
     bool isPaid,
   ) async {
     final db = await database;
-    await db.update(
-      'split_participants',
-      {'isPaid': isPaid ? 1 : 0},
-      where: 'id = ?',
-      whereArgs: [participantId],
-    );
+    await db.transaction((txn) async {
+      await txn.update(
+        'split_participants',
+        {'isPaid': isPaid ? 1 : 0},
+        where: 'id = ?',
+        whereArgs: [participantId],
+      );
+
+      // Reconcile linked debt if exists
+      final pResult = await txn.query(
+        'split_participants',
+        where: 'id = ?',
+        whereArgs: [participantId],
+        limit: 1,
+      );
+      if (pResult.isNotEmpty) {
+        final debtId = pResult.first['debtId'] as String?;
+        if (debtId != null) {
+          final debtRows = await txn.query(
+            'debts',
+            where: 'id = ?',
+            whereArgs: [debtId],
+            limit: 1,
+          );
+          if (debtRows.isNotEmpty) {
+            final debtAmount = (debtRows.first['amount'] as num).toDouble();
+            await txn.update(
+              'debts',
+              {
+                'isSettled': isPaid ? 1 : 0,
+                'paidAmount': isPaid ? debtAmount : 0.0,
+              },
+              where: 'id = ?',
+              whereArgs: [debtId],
+            );
+          }
+        }
+      }
+    });
   }
 
   Future<void> updateSplitParticipantDebtId(
@@ -1376,18 +1420,50 @@ class DatabaseService {
 
   Future<void> setAllSplitParticipantsPaid(String billId, bool isPaid) async {
     final db = await database;
-    await db.update(
-      'split_participants',
-      {'isPaid': isPaid ? 1 : 0},
-      where: 'billId = ?',
-      whereArgs: [billId],
-    );
-    await db.update(
-      'split_bills',
-      {'isSettled': isPaid ? 1 : 0},
-      where: 'id = ?',
-      whereArgs: [billId],
-    );
+    await db.transaction((txn) async {
+      final pRows = await txn.query(
+        'split_participants',
+        where: 'billId = ?',
+        whereArgs: [billId],
+      );
+
+      await txn.update(
+        'split_participants',
+        {'isPaid': isPaid ? 1 : 0},
+        where: 'billId = ?',
+        whereArgs: [billId],
+      );
+      await txn.update(
+        'split_bills',
+        {'isSettled': isPaid ? 1 : 0},
+        where: 'id = ?',
+        whereArgs: [billId],
+      );
+
+      for (final p in pRows) {
+        final debtId = p['debtId'] as String?;
+        if (debtId != null) {
+          final debtRows = await txn.query(
+            'debts',
+            where: 'id = ?',
+            whereArgs: [debtId],
+            limit: 1,
+          );
+          if (debtRows.isNotEmpty) {
+            final debtAmount = (debtRows.first['amount'] as num).toDouble();
+            await txn.update(
+              'debts',
+              {
+                'isSettled': isPaid ? 1 : 0,
+                'paidAmount': isPaid ? debtAmount : 0.0,
+              },
+              where: 'id = ?',
+              whereArgs: [debtId],
+            );
+          }
+        }
+      }
+    });
   }
 
   // ── Tag CRUD ──────────────────────────────────────────────

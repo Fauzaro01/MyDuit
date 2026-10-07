@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../config/app_theme.dart';
 import '../models/split_bill_model.dart';
+import '../providers/debt_provider.dart';
 import '../providers/split_bill_provider.dart';
 import '../services/split_bill_service.dart';
 import '../utils/formatters.dart';
@@ -233,9 +234,11 @@ class _SplitBillScreenState extends State<SplitBillScreen>
                         ),
                         onPressed: () {
                           final shouldPayAll = !currentBill.isSettled;
+                          final debtProvider = Provider.of<DebtProvider?>(context, listen: false);
                           provider.setAllParticipantsPaid(
                             currentBill.id,
                             shouldPayAll,
+                            debtProvider: debtProvider,
                           );
                         },
                       ),
@@ -249,7 +252,12 @@ class _SplitBillScreenState extends State<SplitBillScreen>
                       leading: Checkbox(
                         value: p.isPaid,
                         onChanged: (_) {
-                          provider.toggleParticipantPaid(currentBill.id, p.id);
+                          final debtProvider = Provider.of<DebtProvider?>(context, listen: false);
+                          provider.toggleParticipantPaid(
+                            currentBill.id,
+                            p.id,
+                            debtProvider: debtProvider,
+                          );
                         },
                       ),
                       title: Text(
