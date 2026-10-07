@@ -15,6 +15,7 @@ class AppLockProvider extends ChangeNotifier {
   bool _isFingerprintAvailable = false;
   int _lockTimeoutSeconds = 0; // 0 = Langsung
   DateTime? _pausedAt;
+  bool _isAuthenticating = false;
 
   final LocalAuthentication _localAuth = LocalAuthentication();
 
@@ -102,6 +103,9 @@ class AppLockProvider extends ChangeNotifier {
   }
 
   void onAppPaused() {
+    // The native biometric prompt itself briefly pauses the host app while it's
+    // showing — that's not the user backgrounding the app, so don't re-arm the lock timer.
+    if (_isAuthenticating) return;
     _pausedAt = DateTime.now();
   }
 
@@ -118,6 +122,7 @@ class AppLockProvider extends ChangeNotifier {
   /// Authenticate using fingerprint / biometric — returns true if successful
   Future<bool> authenticateWithFingerprint() async {
     if (!_isFingerprintEnabled || !_isFingerprintAvailable) return false;
+    _isAuthenticating = true;
     try {
       final authenticated = await _localAuth.authenticate(
         localizedReason: 'Buka kunci MyDuit dengan Biometrik (Sidik Jari / Wajah)',
@@ -131,6 +136,8 @@ class AppLockProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Fingerprint auth error: $e');
       return false;
+    } finally {
+      _isAuthenticating = false;
     }
   }
 
