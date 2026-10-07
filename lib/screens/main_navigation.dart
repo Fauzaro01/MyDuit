@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
+import '../services/analytics_service.dart';
 import 'home_screen.dart';
 import 'history_screen.dart';
 import 'statistics_screen.dart';
@@ -23,6 +24,13 @@ class _MainNavigationState extends State<MainNavigation> {
     StatisticsScreen(),
     SettingsScreen(),
   ];
+
+  static const _screenNames = ['home', 'history', 'statistics', 'settings'];
+
+  void _selectTab(int index) {
+    setState(() => _currentIndex = index);
+    AnalyticsService.logScreenView(_screenNames[index]);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,26 +77,26 @@ class _MainNavigationState extends State<MainNavigation> {
                   icon: Icons.home_rounded,
                   label: 'Beranda',
                   isSelected: _currentIndex == 0,
-                  onTap: () => setState(() => _currentIndex = 0),
+                  onTap: () => _selectTab(0),
                 ),
                 _NavItem(
                   icon: Icons.receipt_long_rounded,
                   label: 'Riwayat',
                   isSelected: _currentIndex == 1,
-                  onTap: () => setState(() => _currentIndex = 1),
+                  onTap: () => _selectTab(1),
                 ),
                 const SizedBox(width: 56), // Space for FAB
                 _NavItem(
                   icon: Icons.bar_chart_rounded,
                   label: 'Statistik',
                   isSelected: _currentIndex == 2,
-                  onTap: () => setState(() => _currentIndex = 2),
+                  onTap: () => _selectTab(2),
                 ),
                 _NavItem(
                   icon: Icons.settings_rounded,
                   label: 'Pengaturan',
                   isSelected: _currentIndex == 3,
-                  onTap: () => setState(() => _currentIndex = 3),
+                  onTap: () => _selectTab(3),
                 ),
               ],
             ),

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'database_service.dart';
+import 'analytics_service.dart';
 
 /// Backup schedule options
 enum BackupSchedule { none, weekly, monthly }
@@ -445,6 +446,7 @@ class GoogleDriveService {
       // Keep max 5 snapshots
       await _pruneOldSnapshots(headers, folderId);
 
+      AnalyticsService.logBackupToDrive();
       return BackupResult(
         success: true,
         message: 'Backup berhasil pada ${_formatTime(now)}',

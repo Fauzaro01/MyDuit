@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'config/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'providers/transaction_provider.dart';
@@ -22,6 +23,8 @@ import 'providers/asset_provider.dart';
 import 'providers/template_provider.dart';
 import 'services/notification_service.dart';
 import 'services/google_drive_service.dart';
+import 'services/analytics_service.dart';
+import 'services/crash_service.dart';
 import 'utils/formatters.dart';
 import 'screens/main_navigation.dart';
 import 'screens/splash_screen.dart';
@@ -39,6 +42,13 @@ void main() {
         if (kReleaseMode) {
           debugPrint('FlutterError: ${details.exceptionAsString()}');
         }
+        CrashService.recordFlutterError(details);
+      };
+
+      // Errors outside the Flutter framework (async gaps runZonedGuarded misses)
+      PlatformDispatcher.instance.onError = (error, stack) {
+        CrashService.recordError(error, stack);
+        return true;
       };
 
       bool onboardingComplete = false;
@@ -85,30 +95,45 @@ void main() {
         await appLockProvider.init();
         customCategoryProvider = CustomCategoryProvider();
         currencyProvider = CurrencyProvider();
-        await currencyProvider.init();
+        currencyProvider.init(); // Deferred: not needed before first paint, splash covers it
         splitBillProvider = SplitBillProvider();
         tagProvider = TagProvider();
         subscriptionProvider = SubscriptionProvider();
         assetProvider = AssetProvider();
         templateProvider = TemplateProvider();
-        await templateProvider.loadTemplates();
+        templateProvider.loadTemplates(); // Deferred: same reason
 
-        // Initialize notifications
-        try {
-          await NotificationService.init();
-          await NotificationService.rescheduleIfEnabled();
-        } catch (_) {
-          // Non-fatal: notifications are optional
-        }
+        // Initialize analytics + crash reporting (deferred, non-fatal)
+        unawaited(() async {
+          try {
+            await Firebase.initializeApp();
+            await AnalyticsService.init();
+            await CrashService.init();
+          } catch (_) {
+            // Non-fatal: analytics is optional
+          }
+        }());
 
-        // Initialize Google Sign-In
-        try {
-          await GoogleDriveService.init();
-          // Run scheduled auto-backup if due
-          GoogleDriveService.runScheduledBackupIfNeeded();
-        } catch (_) {
-          // Non-fatal: Google Drive backup is optional
-        }
+        // Initialize notifications (deferred, non-fatal)
+        unawaited(() async {
+          try {
+            await NotificationService.init();
+            await NotificationService.rescheduleIfEnabled();
+          } catch (_) {
+            // Non-fatal: notifications are optional
+          }
+        }());
+
+        // Initialize Google Sign-In (deferred, non-fatal)
+        unawaited(() async {
+          try {
+            await GoogleDriveService.init();
+            // Run scheduled auto-backup if due
+            GoogleDriveService.runScheduledBackupIfNeeded();
+          } catch (_) {
+            // Non-fatal: Google Drive backup is optional
+          }
+        }());
       } catch (e) {
         debugPrint('Provider init error: $e');
         walletProvider = WalletProvider();
@@ -151,6 +176,7 @@ void main() {
     (error, stackTrace) {
       debugPrint('Uncaught error: $error');
       debugPrint('Stack trace: $stackTrace');
+      CrashService.recordError(error, stackTrace);
     },
   );
 }

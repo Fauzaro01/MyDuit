@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:home_widget/home_widget.dart';
 import '../models/wallet_model.dart';
 import '../models/transfer_model.dart';
 import '../services/database_service.dart';
+import '../services/analytics_service.dart';
+import '../utils/formatters.dart';
 
 class WalletProvider extends ChangeNotifier {
   final DatabaseService _dbService = DatabaseService();
@@ -88,6 +91,16 @@ class WalletProvider extends ChangeNotifier {
       balances[wallet.id] = await _dbService.getWalletBalance(wallet.id);
     }
     _walletBalances = balances;
+    _updateHomeWidget();
+  }
+
+  /// Push total balance to the Android home-screen widget. Fire-and-forget,
+  /// non-fatal — widget is a nice-to-have, never blocks balance loading.
+  void _updateHomeWidget() {
+    HomeWidget.saveWidgetData<String>(
+      'balance_text',
+      CurrencyFormatter.format(totalBalance),
+    ).then((_) => HomeWidget.updateWidget(androidName: 'BalanceWidgetProvider')).catchError((_) => null);
   }
 
   Future<void> loadTransfers(int year, int month) async {
@@ -111,6 +124,7 @@ class WalletProvider extends ChangeNotifier {
   Future<void> addWallet(WalletModel wallet) async {
     await _dbService.insertWallet(wallet);
     await loadWallets();
+    AnalyticsService.logWalletAdded();
   }
 
   Future<void> updateWallet(WalletModel wallet) async {
