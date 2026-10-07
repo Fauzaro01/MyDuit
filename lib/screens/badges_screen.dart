@@ -6,6 +6,8 @@ import '../providers/transaction_provider.dart';
 import '../providers/savings_provider.dart';
 import '../providers/debt_provider.dart';
 import '../services/gamification_engine.dart';
+import '../widgets/animated_flame_icon.dart';
+import '../widgets/badge_icon.dart';
 
 class BadgesScreen extends StatelessWidget {
   const BadgesScreen({super.key});
@@ -61,7 +63,7 @@ class BadgesScreen extends StatelessWidget {
                     color: Colors.white.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Text('🔥', style: TextStyle(fontSize: 36)),
+                  child: AnimatedFlameIcon(size: 36, active: streak.currentStreak > 0),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -150,18 +152,9 @@ class _BadgeCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: badge.isUnlocked
-                  ? const Color(0xFFFFB703).withValues(alpha: 0.15)
-                  : Colors.grey.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              badge.isUnlocked ? badge.emoji : '🔒',
-              style: const TextStyle(fontSize: 28),
-            ),
+          Padding(
+            padding: const EdgeInsets.all(6),
+            child: BadgeIcon(type: badge.iconType, locked: !badge.isUnlocked, size: 40),
           ),
           const SizedBox(height: 8),
           Text(
