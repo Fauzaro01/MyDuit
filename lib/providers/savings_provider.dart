@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/savings_goal_model.dart';
+import '../models/savings_contribution_model.dart';
 import '../services/database_service.dart';
 
 class SavingsProvider extends ChangeNotifier {
@@ -51,22 +52,24 @@ class SavingsProvider extends ChangeNotifier {
     await loadGoals();
   }
 
-  Future<void> addAmountToGoal(String goalId, double amount) async {
-    if (amount <= 0) return;
-    await _dbService.addToSavingsGoal(goalId, amount);
-    final goal = _goals.where((g) => g.id == goalId).firstOrNull;
-    if (goal != null && (goal.currentAmount + amount >= goal.targetAmount) && !goal.isCompleted) {
-      await _dbService.updateSavingsGoal(goal.copyWith(
-        currentAmount: goal.currentAmount + amount,
-        isCompleted: true,
-      ));
-    }
+  /// Records a contribution. Returns true if it just fully funded the goal.
+  Future<bool> addAmountToGoal(
+    String goalId,
+    double amount, {
+    String? note,
+    String? walletId,
+  }) async {
+    if (amount <= 0) return false;
+    final justCompleted = await _dbService.addToSavingsGoal(
+      goalId,
+      amount,
+      note: note,
+      walletId: walletId,
+    );
     await loadGoals();
+    return justCompleted;
   }
 
-  Future<void> toggleCompleted(SavingsGoalModel goal) async {
-    final updated = goal.copyWith(isCompleted: !goal.isCompleted);
-    await _dbService.updateSavingsGoal(updated);
-    await loadGoals();
-  }
+  Future<List<SavingsContributionModel>> getContributionsForGoal(String goalId) =>
+      _dbService.getSavingsContributions(goalId);
 }

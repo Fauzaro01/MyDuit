@@ -9,6 +9,7 @@ import '../models/transaction_model.dart';
 import '../providers/debt_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../services/notification_service.dart';
 import '../utils/formatters.dart';
 
 enum DebtSortOption { dueDate, amountDesc, nameAsc }
@@ -24,6 +25,8 @@ class _DebtScreenState extends State<DebtScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   DebtSortOption _sortOption = DebtSortOption.dueDate;
+  String _searchQuery = '';
+  bool _overdueOnly = false;
 
   @override
   void initState() {
@@ -38,6 +41,13 @@ class _DebtScreenState extends State<DebtScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  List<DebtModel> _filterDebts(List<DebtModel> list) {
+    return list
+        .where((d) => d.personName.toLowerCase().contains(_searchQuery.toLowerCase()))
+        .where((d) => !_overdueOnly || d.isOverdue)
+        .toList();
   }
 
   List<DebtModel> _sortDebts(List<DebtModel> list) {
@@ -143,33 +153,61 @@ class _DebtScreenState extends State<DebtScreen>
                   overdueCount: provider.overdueDebts.length,
                 ).animate().fadeIn(duration: 400.ms),
 
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          onChanged: (v) => setState(() => _searchQuery = v),
+                          decoration: InputDecoration(
+                            hintText: 'Cari nama...',
+                            prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilterChip(
+                        label: const Text('Jatuh tempo'),
+                        selected: _overdueOnly,
+                        onSelected: (v) => setState(() => _overdueOnly = v),
+                      ),
+                    ],
+                  ),
+                ),
+
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
                     children: [
                       _DebtList(
-                        debts: _sortDebts(provider.myDebts),
-                        settled: _sortDebts(provider.settledDebts
+                        debts: _sortDebts(_filterDebts(provider.myDebts)),
+                        settled: _sortDebts(_filterDebts(provider.settledDebts
                             .where((d) => d.type == DebtType.iOwe)
-                            .toList()),
+                            .toList())),
                         isDark: isDark,
                         emptyMessage: 'Tidak ada hutang 🎉',
                         onAddPayment: (debt) =>
                             _showPaymentSheet(context, debt),
-                        onSettle: (debt) => _confirmSettle(context, provider, debt),
+                        onSettle: (debt) => _showPaymentSheet(context, debt, settleFull: true),
                         onEdit: (debt) => _showAddDebtSheet(context, debt),
                         onDelete: (debt) => _confirmDelete(context, provider, debt),
                       ),
                       _DebtList(
-                        debts: _sortDebts(provider.myReceivables),
-                        settled: _sortDebts(provider.settledDebts
+                        debts: _sortDebts(_filterDebts(provider.myReceivables)),
+                        settled: _sortDebts(_filterDebts(provider.settledDebts
                             .where((d) => d.type == DebtType.owedToMe)
-                            .toList()),
+                            .toList())),
                         isDark: isDark,
                         emptyMessage: 'Tidak ada piutang',
                         onAddPayment: (debt) =>
                             _showPaymentSheet(context, debt),
-                        onSettle: (debt) => _confirmSettle(context, provider, debt),
+                        onSettle: (debt) => _showPaymentSheet(context, debt, settleFull: true),
                         onEdit: (debt) => _showAddDebtSheet(context, debt),
                         onDelete: (debt) => _confirmDelete(context, provider, debt),
                       ),
@@ -197,36 +235,10 @@ class _DebtScreenState extends State<DebtScreen>
           TextButton(
             onPressed: () {
               provider.deleteDebt(debt.id);
+              NotificationService.cancelDebtReminder(debt.id);
               Navigator.pop(ctx);
             },
             child: const Text('Hapus', style: TextStyle(color: AppColors.expense)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmSettle(BuildContext context, DebtProvider provider, DebtModel debt) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Tandai Lunas?'),
-        content: Text(
-          debt.type == DebtType.iOwe
-              ? 'Tandai hutang ke ${debt.personName} sebagai lunas?'
-              : 'Tandai piutang dari ${debt.personName} sebagai lunas?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Batal'),
-          ),
-          TextButton(
-            onPressed: () {
-              provider.settleDebt(debt);
-              Navigator.pop(ctx);
-            },
-            child: const Text('Lunas', style: TextStyle(color: AppColors.income)),
           ),
         ],
       ),
@@ -247,12 +259,16 @@ class _DebtScreenState extends State<DebtScreen>
     );
   }
 
-  void _showPaymentSheet(BuildContext context, DebtModel debt) {
+  void _showPaymentSheet(
+    BuildContext context,
+    DebtModel debt, {
+    bool settleFull = false,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _DebtPaymentSheet(debt: debt),
+      builder: (_) => _DebtPaymentSheet(debt: debt, settleFull: settleFull),
     );
   }
 }
@@ -260,7 +276,8 @@ class _DebtScreenState extends State<DebtScreen>
 // ── Debt Payment Bottom Sheet ────────────────────────────────
 class _DebtPaymentSheet extends StatefulWidget {
   final DebtModel debt;
-  const _DebtPaymentSheet({required this.debt});
+  final bool settleFull;
+  const _DebtPaymentSheet({required this.debt, this.settleFull = false});
 
   @override
   State<_DebtPaymentSheet> createState() => _DebtPaymentSheetState();
@@ -278,6 +295,11 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
     final wallets = walletProvider?.wallets ?? [];
     if (wallets.isNotEmpty) {
       _selectedWalletId = walletProvider?.activeWallet?.id ?? wallets.first.id;
+    }
+    if (widget.settleFull) {
+      _controller.text = CurrencyInputService.isFormatted
+          ? RupiahInputFormatter.formatNumber(widget.debt.remainingAmount)
+          : widget.debt.remainingAmount.toStringAsFixed(0);
     }
   }
 
@@ -443,7 +465,10 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
     final txProvider = Provider.of<TransactionProvider?>(context, listen: false);
     final walletProvider = Provider.of<WalletProvider?>(context, listen: false);
 
-    await debtProvider.addPayment(widget.debt.id, paymentAmount);
+    final justSettled = await debtProvider.addPayment(widget.debt.id, paymentAmount);
+    if (justSettled) {
+      NotificationService.cancelDebtReminder(widget.debt.id);
+    }
 
     if (_syncWallet && _selectedWalletId != null) {
       final isIOwe = widget.debt.type == DebtType.iOwe;
@@ -580,6 +605,22 @@ class _DebtList extends StatelessWidget {
     required this.onDelete,
   });
 
+  /// Net total per person, only for names with 2+ active entries — lets you
+  /// see at a glance how much a specific person owes/is owed across entries.
+  Map<String, double> _personRollup() {
+    final nameCounts = <String, int>{};
+    for (final d in debts) {
+      nameCounts[d.personName] = (nameCounts[d.personName] ?? 0) + 1;
+    }
+    final rollup = <String, double>{};
+    for (final d in debts) {
+      if ((nameCounts[d.personName] ?? 0) >= 2) {
+        rollup[d.personName] = (rollup[d.personName] ?? 0) + d.remainingAmount;
+      }
+    }
+    return rollup;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (debts.isEmpty && settled.isEmpty) {
@@ -591,9 +632,54 @@ class _DebtList extends StatelessWidget {
       );
     }
 
+    final rollup = _personRollup();
+    final sortedRollup = rollup.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 80),
       children: [
+        if (sortedRollup.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.cardDark : AppColors.cardLight,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '👥 Ringkasan per Orang',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (final entry in sortedRollup)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(entry.key, style: const TextStyle(fontSize: 13)),
+                        Text(
+                          CurrencyFormatter.formatCompact(entry.value),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
         ...debts.asMap().entries.map(
           (entry) =>
               _DebtTile(
@@ -1270,6 +1356,12 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
     } else {
       provider.addDebt(debt);
     }
+
+    NotificationService.cancelDebtReminder(debt.id);
+    if (!debt.isSettled && debt.dueDate != null) {
+      NotificationService.scheduleDebtReminder(debt);
+    }
+
     Navigator.pop(context);
   }
 }

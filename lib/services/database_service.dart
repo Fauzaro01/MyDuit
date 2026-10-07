@@ -7,6 +7,7 @@ import '../models/wallet_model.dart';
 import '../models/transfer_model.dart';
 import '../models/recurring_transaction_model.dart';
 import '../models/savings_goal_model.dart';
+import '../models/savings_contribution_model.dart';
 import '../models/debt_model.dart';
 import '../models/custom_category_model.dart';
 import '../models/split_bill_model.dart';
@@ -37,7 +38,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 10,
+      version: 11,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -135,6 +136,7 @@ class DatabaseService {
     await _createV8Tables(db);
     await _createV9Tables(db);
     await _createV10Tables(db);
+    await _createV11Tables(db);
 
     // Seed default wallet
     await _seedDefaultWallet(db);
@@ -296,6 +298,20 @@ class DatabaseService {
     ''');
   }
 
+  Future<void> _createV11Tables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS savings_contributions(
+        id TEXT PRIMARY KEY,
+        goalId TEXT NOT NULL,
+        amount REAL NOT NULL,
+        date INTEGER NOT NULL,
+        note TEXT,
+        walletId TEXT,
+        FOREIGN KEY (goalId) REFERENCES savings_goals(id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('''
@@ -376,6 +392,9 @@ class DatabaseService {
       try {
         await db.execute('ALTER TABLE transfers ADD COLUMN adminFee REAL NOT NULL DEFAULT 0.0');
       } catch (_) {}
+    }
+    if (oldVersion < 11) {
+      await _createV11Tables(db);
     }
   }
 
@@ -986,9 +1005,27 @@ class DatabaseService {
     return List.generate(maps.length, (i) => SavingsGoalModel.fromMap(maps[i]));
   }
 
-  Future<void> addToSavingsGoal(String goalId, double amount) async {
-    if (amount <= 0) return;
+  /// Records a contribution toward a savings goal. Returns true if this
+  /// contribution just brought the goal to fully funded.
+  Future<bool> addToSavingsGoal(
+    String goalId,
+    double amount, {
+    String? note,
+    DateTime? date,
+    String? walletId,
+  }) async {
+    if (amount <= 0) return false;
     final db = await database;
+
+    await db.insert('savings_contributions', {
+      'id': const Uuid().v4(),
+      'goalId': goalId,
+      'amount': amount,
+      'date': (date ?? DateTime.now()).millisecondsSinceEpoch,
+      'note': note,
+      'walletId': walletId,
+    });
+
     await db.rawUpdate(
       'UPDATE savings_goals SET currentAmount = currentAmount + ? WHERE id = ?',
       [amount, goalId],
@@ -1008,8 +1045,21 @@ class DatabaseService {
           where: 'id = ?',
           whereArgs: [goalId],
         );
+        return true;
       }
     }
+    return false;
+  }
+
+  Future<List<SavingsContributionModel>> getSavingsContributions(String goalId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'savings_contributions',
+      where: 'goalId = ?',
+      whereArgs: [goalId],
+      orderBy: 'date DESC',
+    );
+    return List.generate(maps.length, (i) => SavingsContributionModel.fromMap(maps[i]));
   }
 
   // ── Debt CRUD ─────────────────────────────────────────────
@@ -1034,6 +1084,14 @@ class DatabaseService {
 
   Future<void> deleteDebt(String id) async {
     final db = await database;
+    // Clear any split-bill participant still pointing at this debt so it
+    // doesn't dangle (split_participants.debtId has no FK constraint).
+    await db.update(
+      'split_participants',
+      {'debtId': null},
+      where: 'debtId = ?',
+      whereArgs: [id],
+    );
     await db.delete('debts', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -1057,20 +1115,22 @@ class DatabaseService {
     return List.generate(maps.length, (i) => DebtModel.fromMap(maps[i]));
   }
 
-  Future<void> addDebtPayment(
+  /// Records a debt payment. Returns true if this payment just brought the
+  /// debt to fully paid (caller can react, e.g. cancel a due-date reminder).
+  Future<bool> addDebtPayment(
     String debtId,
     double amount, {
     String? note,
     DateTime? date,
   }) async {
-    if (amount <= 0) return;
+    if (amount <= 0) return false;
     final db = await database;
     final existing = await db.query(
       'debts',
       where: 'id = ?',
       whereArgs: [debtId],
     );
-    if (existing.isEmpty) return;
+    if (existing.isEmpty) return false;
     final debt = DebtModel.fromMap(existing.first);
     final remaining = (debt.amount - debt.paidAmount).clamp(0.0, double.infinity);
     final paymentToApply = amount > remaining ? remaining : amount;
@@ -1101,8 +1161,42 @@ class DatabaseService {
           where: 'id = ?',
           whereArgs: [debtId],
         );
+
+        // If this debt originated from a split bill, reflect the payoff back:
+        // mark that participant paid, and auto-settle the bill if everyone is.
+        final linked = await db.query(
+          'split_participants',
+          where: 'debtId = ?',
+          whereArgs: [debtId],
+          limit: 1,
+        );
+        if (linked.isNotEmpty) {
+          final billId = linked.first['billId'] as String;
+          await db.update(
+            'split_participants',
+            {'isPaid': 1},
+            where: 'debtId = ?',
+            whereArgs: [debtId],
+          );
+          final allParticipants = await db.query(
+            'split_participants',
+            where: 'billId = ?',
+            whereArgs: [billId],
+          );
+          if (allParticipants.every((row) => (row['isPaid'] as int) == 1)) {
+            await db.update(
+              'split_bills',
+              {'isSettled': 1},
+              where: 'id = ?',
+              whereArgs: [billId],
+            );
+          }
+        }
+
+        return true;
       }
     }
+    return false;
   }
 
   Future<List<DebtPaymentModel>> getDebtPayments(String debtId) async {

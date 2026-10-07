@@ -69,5 +69,23 @@ void main() {
       expect(g1Res.allocatedAmount, 500000);
       expect(g1Res.willComplete, isFalse);
     });
+
+    test('priorityFirst never pushes a goal past its target when dumping leftover', () {
+      // Both goals' remaining needs (3.000.000 + 2.000.000 = 5.000.000) are fully
+      // covered; the extra 1.000.000 would have overshot goal2 (closest deadline,
+      // first in sorted order) before the clamp fix.
+      final res = AutoAllocationEngine.calculateAllocation(
+        depositAmount: 6000000,
+        activeGoals: [goal1, goal2],
+        strategy: AllocationStrategy.priorityFirst,
+      );
+
+      final g2Res = res.firstWhere((r) => r.goalId == 'g2');
+      expect(g2Res.newCurrentAmount, lessThanOrEqualTo(g2Res.targetAmount));
+      expect(g2Res.newCurrentAmount, g2Res.targetAmount); // capped exactly at target
+
+      final g1Res = res.firstWhere((r) => r.goalId == 'g1');
+      expect(g1Res.newCurrentAmount, lessThanOrEqualTo(g1Res.targetAmount));
+    });
   });
 }

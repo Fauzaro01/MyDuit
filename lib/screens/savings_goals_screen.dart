@@ -4,10 +4,12 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../models/savings_goal_model.dart';
+import '../models/savings_contribution_model.dart';
 import '../models/transaction_model.dart';
 import '../providers/savings_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../services/notification_service.dart';
 import '../utils/formatters.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../services/auto_allocation_engine.dart';
@@ -255,6 +257,7 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
           TextButton(
             onPressed: () {
               provider.deleteGoal(goal.id);
+              NotificationService.cancelSavingsReminder(goal.id);
               Navigator.pop(ctx);
             },
             child: Text('Hapus', style: TextStyle(color: AppColors.expense)),
@@ -293,6 +296,32 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
       builder: (_) => _DepositSavingsSheet(goal: goal),
     );
   }
+}
+
+/// Creates the expense transaction + wallet-balance refresh shared by both
+/// the single-goal deposit sheet and the multi-goal auto-allocation sheet.
+Future<void> _createSavingsSyncTransaction(
+  BuildContext context, {
+  required String title,
+  required double amount,
+  required String walletId,
+  required String note,
+}) async {
+  final txProvider = Provider.of<TransactionProvider?>(context, listen: false);
+  final walletProvider = Provider.of<WalletProvider?>(context, listen: false);
+  if (txProvider == null) return;
+  await txProvider.addTransaction(
+    TransactionModel(
+      title: title,
+      amount: amount,
+      type: TransactionType.expense,
+      category: TransactionCategory.other,
+      walletId: walletId,
+      date: DateTime.now(),
+      note: note,
+    ),
+  );
+  await walletProvider?.refreshBalances();
 }
 
 // ── Deposit Savings Bottom Sheet ─────────────────────────────
@@ -470,8 +499,6 @@ class _DepositSavingsSheetState extends State<_DepositSavingsSheet> {
     if (amount <= 0) return;
 
     final savingsProvider = context.read<SavingsProvider>();
-    final txProvider = Provider.of<TransactionProvider?>(context, listen: false);
-    final walletProvider = Provider.of<WalletProvider?>(context, listen: false);
 
     final oldRatio = widget.goal.targetAmount > 0
         ? (widget.goal.currentAmount / widget.goal.targetAmount)
@@ -490,23 +517,24 @@ class _DepositSavingsSheetState extends State<_DepositSavingsSheet> {
       milestoneAchieved = 50;
     }
 
-    await savingsProvider.addAmountToGoal(widget.goal.id, amount);
+    final hasWalletSync = _syncWallet && _selectedWalletId != null;
+    final justCompleted = await savingsProvider.addAmountToGoal(
+      widget.goal.id,
+      amount,
+      walletId: hasWalletSync ? _selectedWalletId : null,
+    );
+    if (justCompleted) {
+      NotificationService.cancelSavingsReminder(widget.goal.id);
+    }
 
-    if (_syncWallet && _selectedWalletId != null) {
-      if (txProvider != null) {
-        await txProvider.addTransaction(
-          TransactionModel(
-            title: 'Tabungan: ${widget.goal.title}',
-            amount: amount,
-            type: TransactionType.expense,
-            category: TransactionCategory.other,
-            walletId: _selectedWalletId,
-            date: DateTime.now(),
-            note: 'Setor ke tabungan ${widget.goal.emoji} ${widget.goal.title}',
-          ),
-        );
-        await walletProvider?.refreshBalances();
-      }
+    if (hasWalletSync && mounted) {
+      await _createSavingsSyncTransaction(
+        context,
+        title: 'Tabungan: ${widget.goal.title}',
+        amount: amount,
+        walletId: _selectedWalletId!,
+        note: 'Setor ke tabungan ${widget.goal.emoji} ${widget.goal.title}',
+      );
     }
 
     if (mounted) {
@@ -680,9 +708,31 @@ class _GoalCard extends StatelessWidget {
                       ),
                     ),
                     if (goal.targetDate != null)
-                      Text(
-                        'Target: ${DateFormatter.fullDate(goal.targetDate!)}',
-                        style: theme.textTheme.bodySmall,
+                      Row(
+                        children: [
+                          Text(
+                            'Target: ${DateFormatter.fullDate(goal.targetDate!)}',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          if (goal.isOverdue) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: AppColors.expense.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '⚠️ Lewat Target',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.expense,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                   ],
                 ),
@@ -690,6 +740,7 @@ class _GoalCard extends StatelessWidget {
               PopupMenuButton<String>(
                 onSelected: (val) {
                   if (val == 'simulate') _showCompoundSimulator(context, goal);
+                  if (val == 'history') _showContributionHistory(context, goal);
                   if (val == 'edit') onEdit?.call();
                   if (val == 'delete') onDelete();
                 },
@@ -701,6 +752,16 @@ class _GoalCard extends StatelessWidget {
                         Icon(Icons.trending_up_rounded, size: 18),
                         SizedBox(width: 8),
                         Text('Simulasi Investasi (FV)'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'history',
+                    child: Row(
+                      children: [
+                        Icon(Icons.history_rounded, size: 18),
+                        SizedBox(width: 8),
+                        Text('Riwayat Setoran'),
                       ],
                     ),
                   ),
@@ -754,6 +815,15 @@ class _GoalCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Estimasi ${goal.estimatedDaysRemaining} hari lagi',
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+          if (goal.suggestedMonthlyAmount != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Perlu ${CurrencyFormatter.formatCompact(goal.suggestedMonthlyAmount!)}/bulan buat capai target',
               style: theme.textTheme.bodySmall?.copyWith(
                 fontStyle: FontStyle.italic,
               ),
@@ -905,6 +975,119 @@ class _GoalCard extends StatelessWidget {
           },
         );
       },
+    );
+  }
+
+  void _showContributionHistory(BuildContext context, SavingsGoalModel goal) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SavingsContributionHistorySheet(goal: goal),
+    );
+  }
+}
+
+// ── Contribution History Bottom Sheet ────────────────────────
+class _SavingsContributionHistorySheet extends StatelessWidget {
+  final SavingsGoalModel goal;
+  const _SavingsContributionHistorySheet({required this.goal});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final wallets = context.read<WalletProvider>().wallets;
+
+    String walletLabel(String? walletId) {
+      if (walletId == null) return 'Tidak disinkron ke wallet';
+      final wallet = wallets.where((w) => w.id == walletId).firstOrNull;
+      return wallet != null ? '🔗 Disinkron ke ${wallet.name}' : '🔗 Disinkron ke wallet (sudah dihapus)';
+    }
+
+    return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.paddingOf(context).bottom + 20),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: theme.dividerColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Riwayat Setoran · ${goal.title}', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 12),
+          Flexible(
+            child: FutureBuilder<List<SavingsContributionModel>>(
+              future: context.read<SavingsProvider>().getContributionsForGoal(goal.id),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final contributions = snapshot.data!;
+                if (contributions.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Text(
+                      'Belum ada setoran tercatat.',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  );
+                }
+                return ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: contributions.length,
+                  separatorBuilder: (_, _) => const Divider(height: 16),
+                  itemBuilder: (context, i) {
+                    final c = contributions[i];
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                DateFormatter.fullDate(c.date),
+                                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                              Text(
+                                walletLabel(c.walletId),
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              if (c.note != null && c.note!.isNotEmpty)
+                                Text(c.note!, style: theme.textTheme.bodySmall),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '+${CurrencyFormatter.format(c.amount)}',
+                          style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.income),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1189,17 +1372,23 @@ class _AddGoalSheetState extends State<_AddGoalSheet> {
   void _save() {
     if (!_formKey.currentState!.validate()) return;
 
+    final targetAmount = RupiahInputFormatter.parse(_targetController.text);
+    final currentAmount = _isEditing
+        ? RupiahInputFormatter.parse(_currentController.text)
+        : 0.0;
+
     final goal = SavingsGoalModel(
       id: widget.existing?.id,
       title: _titleController.text.trim(),
       emoji: _emoji,
-      targetAmount: RupiahInputFormatter.parse(_targetController.text),
-      currentAmount: _isEditing
-          ? RupiahInputFormatter.parse(_currentController.text)
-          : 0,
+      targetAmount: targetAmount,
+      currentAmount: currentAmount,
       createdAt: widget.existing?.createdAt,
       targetDate: _targetDate,
-      isCompleted: widget.existing?.isCompleted ?? false,
+      // Recomputed from the just-entered amounts, not carried over from the
+      // old flag — otherwise bumping currentAmount past target here never
+      // actually moved the goal to "Tercapai".
+      isCompleted: targetAmount > 0 && currentAmount >= targetAmount,
     );
 
     final provider = context.read<SavingsProvider>();
@@ -1208,6 +1397,12 @@ class _AddGoalSheetState extends State<_AddGoalSheet> {
     } else {
       provider.addGoal(goal);
     }
+
+    NotificationService.cancelSavingsReminder(goal.id);
+    if (!goal.isCompleted && goal.targetDate != null) {
+      NotificationService.scheduleSavingsReminder(goal);
+    }
+
     Navigator.pop(context);
   }
 }
@@ -1464,28 +1659,29 @@ class _AutoAllocationSheetState extends State<_AutoAllocationSheet> {
     );
 
     final savingsProvider = context.read<SavingsProvider>();
-    final txProvider = Provider.of<TransactionProvider?>(context, listen: false);
-    final walletProvider = Provider.of<WalletProvider?>(context, listen: false);
+    final hasWalletSync = _syncWallet && _selectedWalletId != null;
 
     for (final alloc in allocations) {
       if (alloc.allocatedAmount > 0) {
-        await savingsProvider.addAmountToGoal(alloc.goalId, alloc.allocatedAmount);
+        final justCompleted = await savingsProvider.addAmountToGoal(
+          alloc.goalId,
+          alloc.allocatedAmount,
+          walletId: hasWalletSync ? _selectedWalletId : null,
+        );
+        if (justCompleted) {
+          NotificationService.cancelSavingsReminder(alloc.goalId);
+        }
       }
     }
 
-    if (_syncWallet && _selectedWalletId != null && txProvider != null) {
-      await txProvider.addTransaction(
-        TransactionModel(
-          title: 'Alokasi Multi-Tabungan',
-          amount: inputAmount,
-          type: TransactionType.expense,
-          category: TransactionCategory.other,
-          walletId: _selectedWalletId,
-          date: DateTime.now(),
-          note: 'Distribusi otomatis ke ${allocations.length} target tabungan',
-        ),
+    if (hasWalletSync && mounted) {
+      await _createSavingsSyncTransaction(
+        context,
+        title: 'Alokasi Multi-Tabungan',
+        amount: inputAmount,
+        walletId: _selectedWalletId!,
+        note: 'Distribusi otomatis ke ${allocations.length} target tabungan',
       );
-      await walletProvider?.refreshBalances();
     }
 
     if (mounted) {
