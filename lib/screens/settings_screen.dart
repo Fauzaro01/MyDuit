@@ -336,49 +336,13 @@ class SettingsScreen extends StatelessWidget {
                 children: [
                   _SettingsTile(
                     icon: Icons.dark_mode_rounded,
-                    title: 'Mode Gelap',
-                    subtitle: _getThemeModeLabel(themeProvider.themeMode),
-                    trailing: Switch.adaptive(
-                      value: themeProvider.themeMode == ThemeMode.dark,
-                      onChanged: (_) => themeProvider.toggleTheme(),
-                      activeTrackColor: AppColors.primaryDark,
-                    ),
-                  ),
-                  if (themeProvider.themeMode == ThemeMode.dark) ...[
-                    const Divider(height: 1, indent: 56),
-                    _SettingsTile(
-                      icon: Icons.brightness_2_rounded,
-                      title: 'AMOLED Pure Black',
-                      subtitle: themeProvider.isAmoledMode
-                          ? 'Hitam murni (#000000) hemat baterai OLED'
-                          : 'Warna gelap standar',
-                      trailing: Switch.adaptive(
-                        value: themeProvider.isAmoledMode,
-                        onChanged: (_) => themeProvider.toggleAmoledMode(),
-                        activeTrackColor: AppColors.primaryDark,
-                      ),
-                    ),
-                  ],
-                  const Divider(height: 1, indent: 56),
-                  _SettingsTile(
-                    icon: Icons.palette_outlined,
-                    title: 'Tema Sistem',
-                    subtitle: 'Ikuti pengaturan perangkat',
-                    trailing: Switch.adaptive(
-                      value: themeProvider.themeMode == ThemeMode.system,
-                      onChanged: (val) {
-                        if (val) {
-                          themeProvider.setThemeMode(ThemeMode.system);
-                        } else {
-                          themeProvider.setThemeMode(
-                            isDark ? ThemeMode.dark : ThemeMode.light,
-                          );
-                        }
-                      },
-                      activeTrackColor: isDark
-                          ? AppColors.primaryDark
-                          : AppColors.primaryLight,
-                    ),
+                    title: 'Mode Tema',
+                    subtitle: _getThemeModeLabel(themeProvider.themeMode) +
+                        (themeProvider.themeMode == ThemeMode.dark && themeProvider.isAmoledMode
+                            ? ' · AMOLED'
+                            : ''),
+                    trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                    onTap: () => _showThemeModePicker(context),
                   ),
                   const Divider(height: 1, indent: 56),
                   _SettingsTile(
@@ -981,6 +945,115 @@ class SettingsScreen extends StatelessWidget {
                   );
                 }),
               ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showThemeModePicker(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: Consumer<ThemeProvider>(
+              builder: (context, themeProvider, _) {
+                Widget modeOption({
+                  required IconData icon,
+                  required String label,
+                  required ThemeMode mode,
+                }) {
+                  final isSelected = themeProvider.themeMode == mode;
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: (isDark ? AppColors.primaryDark : AppColors.primaryLight)
+                            .withValues(alpha: isSelected ? 0.2 : 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        icon,
+                        color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+                      ),
+                    ),
+                    title: Text(
+                      label,
+                      style: TextStyle(fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500),
+                    ),
+                    trailing: isSelected
+                        ? Icon(Icons.check_circle_rounded, color: AppColors.income)
+                        : null,
+                    onTap: () {
+                      themeProvider.setThemeMode(mode);
+                      Navigator.pop(ctx);
+                    },
+                  );
+                }
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: (isDark ? AppColors.primaryDark : AppColors.primaryLight)
+                                .withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.dark_mode_rounded,
+                            color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text('Pilih Mode Tema', style: Theme.of(context).textTheme.titleLarge),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    modeOption(
+                      icon: Icons.light_mode_rounded,
+                      label: 'Terang',
+                      mode: ThemeMode.light,
+                    ),
+                    modeOption(
+                      icon: Icons.dark_mode_rounded,
+                      label: 'Gelap',
+                      mode: ThemeMode.dark,
+                    ),
+                    if (themeProvider.themeMode == ThemeMode.dark)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 44, right: 8),
+                        child: SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          title: const Text('AMOLED Pure Black', style: TextStyle(fontSize: 13)),
+                          value: themeProvider.isAmoledMode,
+                          onChanged: (_) => themeProvider.toggleAmoledMode(),
+                          activeThumbColor: AppColors.primaryDark,
+                        ),
+                      ),
+                    modeOption(
+                      icon: Icons.brightness_auto_rounded,
+                      label: 'Sistem',
+                      mode: ThemeMode.system,
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         );
