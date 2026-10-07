@@ -57,9 +57,15 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
-            // Disable ALL code/resource shrinking to prevent MainActivity class from being stripped
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 code shrinking + resource shrinking. Keep rules for the app package and every
+            // plugin that's only reachable via manifest/reflection live in proguard-rules.pro;
+            // res/raw/keep.xml protects the home-screen widget's layout/xml from the resource shrinker.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

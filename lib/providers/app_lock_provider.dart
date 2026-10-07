@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:local_auth/local_auth.dart';
@@ -7,6 +9,11 @@ class AppLockProvider extends ChangeNotifier {
   static const _lockEnabledKey = 'app_lock_enabled';
   static const _fingerprintEnabledKey = 'fingerprint_enabled';
   static const _lockTimeoutKey = 'app_lock_timeout_seconds';
+
+  String _hashPin(String pin) => sha256.convert(utf8.encode(pin)).toString();
+
+  // A legacy plaintext PIN is exactly 4 digits; a hash is 64 hex chars.
+  bool _isLegacyPlaintext(String stored) => stored.length == 4 && int.tryParse(stored) != null;
 
   String? _pin;
   bool _isLockEnabled = false;
@@ -32,6 +39,12 @@ class AppLockProvider extends ChangeNotifier {
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _pin = prefs.getString(_pinKey);
+    if (_pin != null && _isLegacyPlaintext(_pin!)) {
+      // Transparent one-time migration: hash the existing plaintext PIN in place.
+      final hashed = _hashPin(_pin!);
+      await prefs.setString(_pinKey, hashed);
+      _pin = hashed;
+    }
     _isLockEnabled = prefs.getBool(_lockEnabledKey) ?? false;
     _isFingerprintEnabled = prefs.getBool(_fingerprintEnabledKey) ?? false;
     _lockTimeoutSeconds = prefs.getInt(_lockTimeoutKey) ?? 0;
@@ -64,10 +77,11 @@ class AppLockProvider extends ChangeNotifier {
 
   Future<bool> setPin(String newPin) async {
     if (newPin.length != 4) return false;
+    final hashed = _hashPin(newPin);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pinKey, newPin);
+    await prefs.setString(_pinKey, hashed);
     await prefs.setBool(_lockEnabledKey, true);
-    _pin = newPin;
+    _pin = hashed;
     _isLockEnabled = true;
     _isUnlocked = true;
     notifyListeners();
@@ -136,7 +150,7 @@ class AppLockProvider extends ChangeNotifier {
 
   bool verifyPin(String inputPin) {
     if (_pin == null) return false;
-    final isCorrect = inputPin == _pin;
+    final isCorrect = _hashPin(inputPin) == _pin;
     if (isCorrect) {
       _isUnlocked = true;
       notifyListeners();

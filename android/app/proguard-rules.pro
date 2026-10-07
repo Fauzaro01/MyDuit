@@ -46,3 +46,23 @@
 -dontwarn com.google.android.play.core.tasks.OnFailureListener
 -dontwarn com.google.android.play.core.tasks.OnSuccessListener
 -dontwarn com.google.android.play.core.tasks.Task
+
+# App package (covers MainActivity, BalanceWidgetProvider — both declared package com.myduit.app)
+-keep class com.myduit.app.** { *; }
+
+# Firebase Analytics / Crashlytics
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
+
+# google_sign_in
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.android.gms.**
+
+# local_auth
+-keep class androidx.biometric.** { *; }
+
+# home_widget
+-keep class es.antonborri.home_widget.** { *; }
+
+# flutter_local_notifications
+-keep class com.dexterous.flutterlocalnotifications.** { *; }
