@@ -3,6 +3,7 @@ import '../models/savings_goal_model.dart';
 import '../models/debt_model.dart';
 import '../models/budget_model.dart';
 import '../models/financial_badge_model.dart';
+import '../widgets/badge_icon.dart';
 
 class GamificationEngine {
   /// Calculate daily logging streak from transactions
@@ -87,7 +88,7 @@ class GamificationEngine {
         id: 'first_step',
         title: 'Langkah Pertama',
         description: 'Catat transaksi pertamamu di MyDuit.',
-        emoji: '🌱',
+        iconType: BadgeIconType.sprout,
         isUnlocked: txCount >= 1,
         progress: (txCount / 1).clamp(0.0, 1.0),
         progressLabel: '$txCount/1 transaksi',
@@ -100,7 +101,7 @@ class GamificationEngine {
         id: 'streak_3',
         title: 'Pencatat Rajin',
         description: 'Catat keuangan 3 hari berturut-turut.',
-        emoji: '🔥',
+        iconType: BadgeIconType.flame,
         isUnlocked: streak.currentStreak >= 3 || streak.longestStreak >= 3,
         progress: (streak.longestStreak / 3).clamp(0.0, 1.0),
         progressLabel: '${streak.longestStreak}/3 hari',
@@ -113,7 +114,7 @@ class GamificationEngine {
         id: 'streak_7',
         title: 'Pejuang Disiplin',
         description: 'Capai streak pencatatan selama 7 hari.',
-        emoji: '⚡',
+        iconType: BadgeIconType.bolt,
         isUnlocked: streak.currentStreak >= 7 || streak.longestStreak >= 7,
         progress: (streak.longestStreak / 7).clamp(0.0, 1.0),
         progressLabel: '${streak.longestStreak}/7 hari',
@@ -126,10 +127,23 @@ class GamificationEngine {
         id: 'streak_30',
         title: 'Habit Guru 30 Hari',
         description: 'Konsistensi 30 hari pencatatan tanpa henti.',
-        emoji: '👑',
+        iconType: BadgeIconType.crown,
         isUnlocked: streak.currentStreak >= 30 || streak.longestStreak >= 30,
         progress: (streak.longestStreak / 30).clamp(0.0, 1.0),
         progressLabel: '${streak.longestStreak}/30 hari',
+      ),
+    );
+
+    // 4b. Legenda Konsistensi - 100 hari beruntun (varian baru)
+    badges.add(
+      FinancialBadge(
+        id: 'streak_100',
+        title: 'Legenda Konsistensi',
+        description: 'Konsistensi 100 hari pencatatan tanpa henti.',
+        iconType: BadgeIconType.legend,
+        isUnlocked: streak.currentStreak >= 100 || streak.longestStreak >= 100,
+        progress: (streak.longestStreak / 100).clamp(0.0, 1.0),
+        progressLabel: '${streak.longestStreak}/100 hari',
       ),
     );
 
@@ -139,7 +153,7 @@ class GamificationEngine {
         id: 'centurion',
         title: 'Centurion 100',
         description: 'Mencatat total 100 transaksi.',
-        emoji: '💯',
+        iconType: BadgeIconType.gem,
         isUnlocked: txCount >= 100,
         progress: (txCount / 100).clamp(0.0, 1.0),
         progressLabel: '$txCount/100 transaksi',
@@ -153,10 +167,23 @@ class GamificationEngine {
         id: 'goal_achiever',
         title: 'Goal Achiever',
         description: 'Selesaikan minimal 1 target tabungan (100%).',
-        emoji: '🎯',
+        iconType: BadgeIconType.target,
         isUnlocked: completedGoals >= 1,
         progress: (completedGoals / 1).clamp(0.0, 1.0),
         progressLabel: '$completedGoals/1 target tercapai',
+      ),
+    );
+
+    // 6b. Kolektor Target - Selesaikan 3 target tabungan (varian baru)
+    badges.add(
+      FinancialBadge(
+        id: 'goal_collector',
+        title: 'Kolektor Target',
+        description: 'Selesaikan minimal 3 target tabungan.',
+        iconType: BadgeIconType.trophy,
+        isUnlocked: completedGoals >= 3,
+        progress: (completedGoals / 3).clamp(0.0, 1.0),
+        progressLabel: '$completedGoals/3 target tercapai',
       ),
     );
 
@@ -169,7 +196,7 @@ class GamificationEngine {
         id: 'debt_free',
         title: 'Bebas Hutang Hero',
         description: 'Lunasi semua catatan hutang pribadi.',
-        emoji: '🕊️',
+        iconType: BadgeIconType.dove,
         isUnlocked: isDebtFree,
         progress: myDebts.isEmpty ? 0.0 : (settledDebts / myDebts.length).clamp(0.0, 1.0),
         progressLabel: myDebts.isEmpty ? 'Belum ada hutang' : '$settledDebts/${myDebts.length} hutang lunas',
@@ -193,10 +220,36 @@ class GamificationEngine {
         id: 'budget_guardian',
         title: 'Pengendali Anggaran',
         description: 'Seluruh pos anggaran terkendali dalam batas aman.',
-        emoji: '🛡️',
+        iconType: BadgeIconType.shield,
         isUnlocked: isBudgetMaster,
         progress: activeBudgets.isEmpty ? 0.0 : (safeBudgets / activeBudgets.length).clamp(0.0, 1.0),
         progressLabel: activeBudgets.isEmpty ? 'Belum ada anggaran' : '$safeBudgets/${activeBudgets.length} pos aman',
+      ),
+    );
+
+    // 9. Bulan Positif - Pemasukan melebihi pengeluaran bulan ini (varian baru)
+    final now = DateTime.now();
+    final monthTx = transactions.where(
+      (t) => t.date.year == now.year && t.date.month == now.month,
+    );
+    final monthIncome = monthTx
+        .where((t) => t.type == TransactionType.income)
+        .fold(0.0, (s, t) => s + t.amount);
+    final monthExpense = monthTx
+        .where((t) => t.type == TransactionType.expense)
+        .fold(0.0, (s, t) => s + t.amount);
+    final isSaverMonth = monthIncome > 0 && monthIncome > monthExpense;
+    badges.add(
+      FinancialBadge(
+        id: 'saver_month',
+        title: 'Bulan Positif',
+        description: 'Pemasukan melebihi pengeluaran bulan ini.',
+        iconType: BadgeIconType.scaleCoin,
+        isUnlocked: isSaverMonth,
+        progress: monthExpense > 0
+            ? (monthIncome / monthExpense).clamp(0.0, 1.0)
+            : (monthIncome > 0 ? 1.0 : 0.0),
+        progressLabel: isSaverMonth ? 'Surplus bulan ini! 🎉' : 'Belum surplus bulan ini',
       ),
     );
 

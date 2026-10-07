@@ -16,6 +16,7 @@ import 'transfer_screen.dart';
 import 'wallet_screen.dart';
 import 'badges_screen.dart';
 import '../services/gamification_engine.dart';
+import '../widgets/animated_flame_icon.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -93,7 +94,7 @@ class HomeScreen extends StatelessWidget {
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const Text('🔥', style: TextStyle(fontSize: 14)),
+                                            AnimatedFlameIcon(size: 16, active: streak.currentStreak > 0),
                                             const SizedBox(width: 4),
                                             Text(
                                               '${streak.currentStreak}d',
