@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:local_auth/local_auth.dart';
@@ -22,6 +24,13 @@ class AppLockProvider extends ChangeNotifier {
   bool get isLockEnabled => _isLockEnabled;
   bool get isUnlocked => _isUnlocked;
   bool get hasPin => _pin != null && _pin!.isNotEmpty;
+
+  /// Derives a backup-encryption key from the app-lock PIN, domain-separated
+  /// from the PIN's own stored form so the two don't share raw material.
+  String? deriveBackupKey() {
+    if (_pin == null) return null;
+    return sha256.convert(utf8.encode('$_pin:myduit-backup')).toString();
+  }
   bool get needsUnlock => _isLockEnabled && !_isUnlocked;
   bool get isFingerprintEnabled => _isFingerprintEnabled;
   bool get isFingerprintAvailable => _isFingerprintAvailable;

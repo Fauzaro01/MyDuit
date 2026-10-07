@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
+import '../providers/app_lock_provider.dart';
 import '../providers/custom_category_provider.dart';
 import '../providers/debt_provider.dart';
 import '../providers/recurring_provider.dart';
@@ -230,7 +231,7 @@ class _BackupScreenState extends State<BackupScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Restore Data?'),
         content: const Text(
-          'Data saat ini akan digantikan dengan data dari backup.\n\n'
+          '⚠️ Data aplikasi saat ini akan DIHAPUS dan diganti sepenuhnya dengan data dari cadangan ini. Tindakan ini tidak bisa dibatalkan.\n\n'
           'Perlindungan Integritas Aktif: Snapshot keamanan dibuat otomatis sebelum pemulihan, dan akan di-rollback bila data korup.',
         ),
         actions: [
@@ -758,51 +759,77 @@ class _BackupScreenState extends State<BackupScreen> {
     final passwordController = TextEditingController();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final appLockProvider = context.read<AppLockProvider>();
+    final hasPin = appLockProvider.hasPin;
+    bool usePinKey = false;
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Ekspor Cadangan Terkompresi'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'File cadangan akan dikompresi (GZip) untuk menghemat memori. Masukkan password enkripsi opsional:',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                hintText: 'Password enkripsi (opsional)',
-                prefixIcon: Icon(Icons.lock_outline_rounded),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Ekspor Cadangan Terkompresi'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'File cadangan akan dikompresi (GZip) untuk menghemat memori. Masukkan password enkripsi opsional:',
               ),
+              const SizedBox(height: 12),
+              if (hasPin) ...[
+                CheckboxListTile(
+                  value: usePinKey,
+                  onChanged: (v) => setDialogState(() => usePinKey = v ?? false),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('Pakai Kunci PIN Aplikasi'),
+                ),
+                if (usePinKey)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Kunci dari PIN aplikasi kamu — cocok disimpan di HP sendiri, tapi lebih mudah ditebak dibanding password custom kalau file ini dibagikan ke luar.',
+                      style: TextStyle(fontSize: 12, color: Colors.orange),
+                    ),
+                  ),
+              ],
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                enabled: !usePinKey,
+                decoration: const InputDecoration(
+                  hintText: 'Password enkripsi (opsional)',
+                  prefixIcon: Icon(Icons.lock_outline_rounded),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+              ),
+              child: const Text('Ekspor & Bagikan'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: isDark ? AppColors.primaryDark : AppColors.primaryLight,
-            ),
-            child: const Text('Ekspor & Bagikan'),
-          ),
-        ],
       ),
     );
 
     if (confirmed == true) {
       setState(() => _isLoading = true);
       try {
+        final password = usePinKey
+            ? appLockProvider.deriveBackupKey()
+            : (passwordController.text.trim().isEmpty ? null : passwordController.text.trim());
         await LocalBackupService.exportAndShare(
-          password: passwordController.text.trim().isEmpty ? null : passwordController.text.trim(),
+          password: password,
           compress: true,
         );
       } catch (e) {
@@ -844,57 +871,73 @@ class _BackupScreenState extends State<BackupScreen> {
     final subP = context.read<SubscriptionProvider>();
     final aP = context.read<AssetProvider>();
     final tplP = context.read<TemplateProvider>();
+    final appLockProvider = context.read<AppLockProvider>();
+    final hasPin = appLockProvider.hasPin;
+    bool usePinKey = false;
 
     final inputConfirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Impor Cadangan Offline'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Tempelkan teks JSON atau cipher cadangan:'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: jsonController,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  hintText: 'Paste teks JSON backup di sini...',
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Impor Cadangan Offline'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Tempelkan teks JSON atau cipher cadangan:'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: jsonController,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    hintText: 'Paste teks JSON backup di sini...',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  hintText: 'Password enkripsi (jika ada)',
-                  prefixIcon: Icon(Icons.lock_outline_rounded),
+                const SizedBox(height: 12),
+                if (hasPin)
+                  CheckboxListTile(
+                    value: usePinKey,
+                    onChanged: (v) => setDialogState(() => usePinKey = v ?? false),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text('Pakai Kunci PIN Aplikasi'),
+                  ),
+                TextField(
+                  controller: passwordController,
+                  obscureText: true,
+                  enabled: !usePinKey,
+                  decoration: const InputDecoration(
+                    hintText: 'Password enkripsi (jika ada)',
+                    prefixIcon: Icon(Icons.lock_outline_rounded),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.orange,
+              ],
             ),
-            child: const Text('Periksa Cadangan'),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.orange,
+              ),
+              child: const Text('Periksa Cadangan'),
+            ),
+          ],
+        ),
       ),
     );
 
     if (inputConfirmed == true && jsonController.text.trim().isNotEmpty) {
       final rawText = jsonController.text.trim();
-      final pwd = passwordController.text.trim().isEmpty ? null : passwordController.text.trim();
+      final pwd = usePinKey
+          ? appLockProvider.deriveBackupKey()
+          : (passwordController.text.trim().isEmpty ? null : passwordController.text.trim());
 
       setState(() => _isLoading = true);
       BackupPreviewInfo? preview;
@@ -1138,7 +1181,24 @@ class _PreviewDataSheet extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.expense.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.expense.withValues(alpha: 0.4)),
+            ),
+            child: Text(
+              '⚠️ Data aplikasi saat ini akan DIHAPUS dan diganti sepenuhnya dengan data dari cadangan ini. Tindakan ini tidak bisa dibatalkan.',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.expense,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
