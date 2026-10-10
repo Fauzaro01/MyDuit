@@ -18,6 +18,12 @@ class CustomCategoryProvider extends ChangeNotifier {
     loadCategories();
   }
 
+  /// Skips the auto-load every other constructor triggers. For widget tests
+  /// that need a CustomCategoryProvider in the tree but want to control (or
+  /// avoid) real database I/O deterministically, instead of racing it.
+  @visibleForTesting
+  CustomCategoryProvider.forTesting();
+
   Future<void> loadCategories() async {
     _categories = await _dbService.getAllCustomCategories();
     notifyListeners();

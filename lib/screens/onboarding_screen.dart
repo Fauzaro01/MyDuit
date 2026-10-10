@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
@@ -18,19 +19,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   final _pages = const [
     _OnboardingPage(
-      emoji: '📝',
+      lottieAsset: 'assets/lottie/onboarding_catat.json',
       title: 'Catat Keuanganmu',
       description:
           'Catat setiap pemasukan dan pengeluaran dengan mudah. Semua data tersimpan aman di perangkatmu.',
     ),
     _OnboardingPage(
-      emoji: '📊',
+      lottieAsset: 'assets/lottie/onboarding_analisis.json',
       title: 'Analisis Pengeluaran',
       description:
           'Lihat statistik keuanganmu melalui chart interaktif. Pahami kemana uangmu pergi setiap bulannya.',
     ),
     _OnboardingPage(
-      emoji: '🎯',
+      lottieAsset: 'assets/lottie/onboarding_anggaran.json',
       title: 'Atur Anggaran',
       description:
           'Tetapkan batas anggaran per kategori. Dapatkan peringatan saat mendekati batas pengeluaran.',
@@ -105,59 +106,100 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 itemBuilder: (context, index) {
                   final page = _pages[index];
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 36),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Emoji container
-                        Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                color: primary.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(36),
+                        // Lottie icon with a soft glow behind a crisp tile
+                        SizedBox(
+                          width: 180,
+                          height: 180,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Soft diffuse glow, same hue, larger & blurred
+                              Container(
+                                width: 172,
+                                height: 172,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: primary.withValues(alpha: 0.08),
+                                ),
                               ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                page.emoji,
-                                style: const TextStyle(fontSize: 56),
+                              Container(
+                                width: 140,
+                                height: 140,
+                                decoration: BoxDecoration(
+                                  color: primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(38),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: primary.withValues(alpha: 0.18),
+                                      blurRadius: 28,
+                                      offset: const Offset(0, 12),
+                                    ),
+                                  ],
+                                ),
+                                alignment: Alignment.center,
+                                child: Lottie.asset(
+                                  page.lottieAsset,
+                                  width: 112,
+                                  height: 112,
+                                  fit: BoxFit.contain,
+                                  repeat: true,
+                                ),
                               ),
-                            )
-                            .animate()
-                            .scale(
+                            ],
+                          ),
+                        ).animate().scale(
                               begin: const Offset(0.8, 0.8),
                               end: const Offset(1, 1),
                               duration: 500.ms,
                               curve: Curves.easeOutBack,
-                            )
-                            .fadeIn(duration: 400.ms),
-                        const SizedBox(height: 48),
+                            ).fadeIn(duration: 400.ms),
+                        const SizedBox(height: 44),
                         Text(
                           page.title,
                           style: TextStyle(
                             fontFamily: AppTheme.fontFamily,
-                            fontSize: 26,
+                            fontSize: 28,
                             fontWeight: FontWeight.w800,
+                            letterSpacing: -0.3,
                             color: isDark
                                 ? AppColors.textPrimaryDark
                                 : AppColors.textPrimaryLight,
                           ),
                           textAlign: TextAlign.center,
-                        ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
-                        const SizedBox(height: 16),
-                        Text(
-                          page.description,
-                          style: TextStyle(
-                            fontFamily: AppTheme.fontFamily,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w400,
-                            color: isDark
-                                ? AppColors.textSecondaryDark
-                                : AppColors.textSecondaryLight,
-                            height: 1.6,
+                        ).animate().fadeIn(delay: 200.ms, duration: 450.ms).slideY(
+                              begin: 0.25,
+                              end: 0,
+                              delay: 200.ms,
+                              duration: 450.ms,
+                              curve: Curves.easeOutCubic,
+                            ),
+                        const SizedBox(height: 14),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            page.description,
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w400,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
+                              height: 1.65,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                          textAlign: TextAlign.center,
-                        ).animate().fadeIn(delay: 400.ms, duration: 400.ms),
+                        ).animate().fadeIn(delay: 350.ms, duration: 450.ms).slideY(
+                              begin: 0.25,
+                              end: 0,
+                              delay: 350.ms,
+                              duration: 450.ms,
+                              curve: Curves.easeOutCubic,
+                            ),
                       ],
                     ),
                   );
@@ -204,10 +246,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           _completeOnboarding();
                         }
                       },
-                      child: Text(
-                        _currentPage < _pages.length - 1
-                            ? 'Lanjut'
-                            : 'Mulai Sekarang',
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _currentPage < _pages.length - 1
+                                ? 'Lanjut'
+                                : 'Mulai Sekarang',
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            _currentPage < _pages.length - 1
+                                ? Icons.arrow_forward_rounded
+                                : Icons.check_rounded,
+                            size: 20,
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -222,12 +276,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 }
 
 class _OnboardingPage {
-  final String emoji;
+  final String lottieAsset;
   final String title;
   final String description;
 
   const _OnboardingPage({
-    required this.emoji,
+    required this.lottieAsset,
     required this.title,
     required this.description,
   });
