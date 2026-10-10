@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../models/receipt_data.dart';
+import '../models/tag_model.dart';
 import '../models/transaction_model.dart';
 import '../models/transaction_template_model.dart';
 import '../models/wallet_model.dart';
@@ -10,7 +11,6 @@ import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../providers/custom_category_provider.dart';
 import '../providers/tag_provider.dart';
-import '../providers/template_provider.dart';
 import '../services/receipt_parser_service.dart';
 import '../services/auto_categorize_service.dart';
 import '../services/analytics_service.dart';
@@ -215,10 +215,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ],
               ),
             ),
-            if (!_isEditing) ...[
-              const SizedBox(height: 16),
-              _buildTemplateBar(context, isDark),
-            ],
             const SizedBox(height: 24),
 
             // Amount field
@@ -1203,13 +1199,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             spacing: 8,
             runSpacing: 8,
             children: _tags.map((tag) {
-              return Chip(
-                label: Text('#$tag', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                deleteIcon: const Icon(Icons.close_rounded, size: 16),
-                onDeleted: () => setState(() => _tags.remove(tag)),
-                backgroundColor: (isDark ? AppColors.primaryDark : AppColors.primaryLight)
-                    .withValues(alpha: 0.2),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              return Tooltip(
+                message: 'Tekan lama untuk menghapus tag',
+                child: GestureDetector(
+                  onLongPress: () => _confirmDeleteTag(context, tag),
+                  child: Chip(
+                    label: Text('#$tag', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    deleteIcon: const Icon(Icons.close_rounded, size: 16),
+                    onDeleted: () => setState(() => _tags.remove(tag)),
+                    backgroundColor: (isDark ? AppColors.primaryDark : AppColors.primaryLight)
+                        .withValues(alpha: 0.2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
               );
             }).toList(),
           ),
@@ -1243,67 +1245,71 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           Wrap(
             spacing: 6,
             children: popularTags.where((t) => !_tags.contains(t)).map((tag) {
-              return ActionChip(
-                label: Text('#$tag', style: const TextStyle(fontSize: 11)),
-                onPressed: () => _addTag(tag),
-                padding: EdgeInsets.zero,
+              return Tooltip(
+                message: 'Tekan lama untuk menghapus tag',
+                child: GestureDetector(
+                  onLongPress: () => _confirmDeleteTag(context, tag),
+                  child: ActionChip(
+                    label: Text('#$tag', style: const TextStyle(fontSize: 11)),
+                    onPressed: () => _addTag(tag),
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
               );
             }).toList(),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Tip: Tekan lama tag untuk menghapus dari daftar',
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark ? Colors.grey[500] : Colors.grey[600],
+            ),
           ),
         ],
       ],
     );
   }
 
-  Widget _buildTemplateBar(BuildContext context, bool isDark) {
-    final templateProvider = Provider.of<TemplateProvider?>(context);
-    final templates = templateProvider?.templates ?? [];
-    if (templates.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              Icons.bolt_rounded,
-              size: 16,
-              color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              'Template Cepat',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-          ],
+  void _confirmDeleteTag(BuildContext context, String tagName) {
+    HapticFeedback.mediumImpact();
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Hapus Tag?'),
+        content: Text(
+          'Apakah kamu yakin ingin menghapus tag "#$tagName" secara permanen dari daftar label tersimpan?',
         ),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 36,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: templates.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
-            itemBuilder: (context, index) {
-              final tpl = templates[index];
-              return ActionChip(
-                avatar: Text(tpl.emoji, style: const TextStyle(fontSize: 14)),
-                label: Text(
-                  '${tpl.name} · ${CurrencyFormatter.format(tpl.amount)}',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                backgroundColor: isDark ? AppColors.cardAltDark : AppColors.cardAltLight,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                onPressed: () => _applyTemplate(tpl),
-              );
-            },
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Batal'),
           ),
-        ),
-      ],
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.expense),
+            onPressed: () async {
+              Navigator.pop(dialogCtx);
+              final tagProvider = Provider.of<TagProvider?>(context, listen: false);
+              final matchingTag = tagProvider?.tags.firstWhere(
+                (t) => t.name.toLowerCase() == tagName.toLowerCase(),
+                orElse: () => TagModel(name: tagName),
+              );
+              if (matchingTag != null && tagProvider != null) {
+                await tagProvider.deleteTag(matchingTag.id);
+              }
+              setState(() {
+                _tags.removeWhere((t) => t.toLowerCase() == tagName.toLowerCase());
+              });
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Tag "#$tagName" berhasil dihapus')),
+                );
+              }
+            },
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1376,26 +1382,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         },
       ),
     );
-  }
-
-  void _applyTemplate(TransactionTemplateModel tpl) {
-    HapticFeedback.selectionClick();
-    setState(() {
-      _titleController.text = tpl.title;
-      _amountController.text = CurrencyInputService.isFormatted
-          ? RupiahInputFormatter.formatNumber(tpl.amount)
-          : tpl.amount.toStringAsFixed(0);
-      _noteController.text = tpl.note ?? '';
-      _type = tpl.type;
-      _category = tpl.category;
-      _customCategoryId = tpl.customCategoryId;
-      _tags = List<String>.from(tpl.tags);
-      if (tpl.walletId != null) {
-        final walletProvider = context.read<WalletProvider>();
-        final w = walletProvider.getWalletById(tpl.walletId!);
-        if (w != null) _selectedWallet = w;
-      }
-    });
   }
 
   void _addTag(String tag) {

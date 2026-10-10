@@ -217,5 +217,13 @@ void main() {
       expect(find.text('Makanan'), findsWidgets);
       await drainTimers(tester);
     });
+
+    testWidgets('does not display Template Cepat in AddTransactionScreen', (tester) async {
+      await tester.pumpWidget(createTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Template Cepat'), findsNothing);
+      await drainTimers(tester);
+    });
   });
 }

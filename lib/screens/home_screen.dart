@@ -15,6 +15,7 @@ import 'history_screen.dart';
 import 'transfer_screen.dart';
 import 'wallet_screen.dart';
 import 'badges_screen.dart';
+import 'quick_templates_screen.dart';
 import '../services/gamification_engine.dart';
 import '../widgets/animated_flame_icon.dart';
 
@@ -507,6 +508,40 @@ class _QuickTemplateBar extends StatelessWidget {
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
+            ),
+            const Spacer(),
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const QuickTemplatesScreen(),
+                  ),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Atur',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 14,
+                      color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
