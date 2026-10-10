@@ -38,6 +38,7 @@ import 'financial_advisor_screen.dart';
 import 'financial_calculator_screen.dart';
 import 'badges_screen.dart';
 import 'monthly_recap_screen.dart';
+import 'quick_templates_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -127,6 +128,21 @@ class SettingsScreen extends StatelessWidget {
                     context,
                     MaterialPageRoute(
                       builder: (_) => const SplitBillScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              _SettingsTile(
+                icon: Icons.bolt_rounded,
+                title: 'Catat Cepat',
+                subtitle: 'Atur pintasan & template transaksi cepat',
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const QuickTemplatesScreen(),
                     ),
                   );
                 },
