@@ -81,6 +81,9 @@ flutter:
 
   assets:
     - assets/lottie/streak_fire.json
+    - assets/lottie/onboarding_catat.json
+    - assets/lottie/onboarding_analisis.json
+    - assets/lottie/onboarding_anggaran.json
 
   fonts:
     - family: Plus Jakarta Sans

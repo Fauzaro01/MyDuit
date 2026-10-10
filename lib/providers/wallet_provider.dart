@@ -46,6 +46,12 @@ class WalletProvider extends ChangeNotifier {
     loadWallets();
   }
 
+  /// Skips the auto-load every other constructor triggers. For widget tests
+  /// that need a WalletProvider in the tree but want to control (or avoid)
+  /// real database I/O deterministically, instead of racing it.
+  @visibleForTesting
+  WalletProvider.forTesting();
+
   Future<void> loadWallets() async {
     _isLoading = true;
     notifyListeners();
