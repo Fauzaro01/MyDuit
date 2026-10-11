@@ -30,15 +30,20 @@ class AppLockProvider extends ChangeNotifier {
 
   final LocalAuthentication _localAuth = LocalAuthentication();
 
+  String _hashPin(String pin) => sha256.convert(utf8.encode(pin)).toString();
+
+  // A legacy plaintext PIN is exactly 4 digits; a SHA-256 hash is 64 hex chars.
+  bool _isLegacyPlaintext(String stored) =>
+      stored.length == 4 && int.tryParse(stored) != null;
+
   bool get isLockEnabled => _isLockEnabled;
   bool get isUnlocked => _isUnlocked;
   bool get hasPin => _pin != null && _pin!.isNotEmpty;
   int get failedAttempts => _failedAttempts;
   bool get isLockedOut =>
       _lockoutUntil != null && DateTime.now().isBefore(_lockoutUntil!);
-  int get remainingLockoutSeconds => isLockedOut
-      ? _lockoutUntil!.difference(DateTime.now()).inSeconds + 1
-      : 0;
+  int get remainingLockoutSeconds =>
+      isLockedOut ? _lockoutUntil!.difference(DateTime.now()).inSeconds + 1 : 0;
   String? get securityQuestion => _securityQuestion;
   bool get hasSecurityQuestion =>
       _securityQuestion != null && _securityQuestion!.isNotEmpty;
@@ -49,6 +54,7 @@ class AppLockProvider extends ChangeNotifier {
     if (_pin == null) return null;
     return sha256.convert(utf8.encode('$_pin:myduit-backup')).toString();
   }
+
   bool get needsUnlock => _isLockEnabled && !_isUnlocked;
   bool get isFingerprintEnabled => _isFingerprintEnabled;
   bool get isFingerprintAvailable => _isFingerprintAvailable;
@@ -60,6 +66,13 @@ class AppLockProvider extends ChangeNotifier {
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _pin = prefs.getString(_pinKey);
+    if (_pin != null && _isLegacyPlaintext(_pin!)) {
+      // Transparent one-time migration: hash a PIN stored in plaintext by
+      // an older version of the app, in place.
+      final hashed = _hashPin(_pin!);
+      await prefs.setString(_pinKey, hashed);
+      _pin = hashed;
+    }
     _isLockEnabled = prefs.getBool(_lockEnabledKey) ?? false;
     _isFingerprintEnabled = prefs.getBool(_fingerprintEnabledKey) ?? false;
     _lockTimeoutSeconds = prefs.getInt(_lockTimeoutKey) ?? 0;
@@ -102,10 +115,11 @@ class AppLockProvider extends ChangeNotifier {
 
   Future<bool> setPin(String newPin) async {
     if (newPin.length != 4) return false;
+    final hashed = _hashPin(newPin);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pinKey, newPin);
+    await prefs.setString(_pinKey, hashed);
     await prefs.setBool(_lockEnabledKey, true);
-    _pin = newPin;
+    _pin = hashed;
     _isLockEnabled = true;
     _isUnlocked = true;
     _failedAttempts = 0;
@@ -173,7 +187,8 @@ class AppLockProvider extends ChangeNotifier {
     _isAuthenticating = true;
     try {
       final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Buka kunci MyDuit dengan Biometrik (Sidik Jari / Wajah)',
+        localizedReason:
+            'Buka kunci MyDuit dengan Biometrik (Sidik Jari / Wajah)',
         biometricOnly: true,
       );
       if (authenticated) {
@@ -196,7 +211,7 @@ class AppLockProvider extends ChangeNotifier {
     if (_pin == null) return false;
     if (isLockedOut) return false;
 
-    final isCorrect = inputPin == _pin;
+    final isCorrect = _hashPin(inputPin) == _pin;
     if (isCorrect) {
       _failedAttempts = 0;
       _lockoutUntil = null;
@@ -223,7 +238,10 @@ class AppLockProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_failedAttemptsKey, _failedAttempts);
     if (_lockoutUntil != null) {
-      await prefs.setInt(_lockoutUntilKey, _lockoutUntil!.millisecondsSinceEpoch);
+      await prefs.setInt(
+        _lockoutUntilKey,
+        _lockoutUntil!.millisecondsSinceEpoch,
+      );
     } else {
       await prefs.remove(_lockoutUntilKey);
     }

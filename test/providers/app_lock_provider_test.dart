@@ -36,6 +36,45 @@ void main() {
     });
   });
 
+  group('AppLockProvider PIN hashing', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('setPin never persists the PIN in plaintext', () async {
+      final provider = AppLockProvider();
+      await provider.setPin('1234');
+
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getString('app_lock_pin');
+
+      expect(stored, isNotNull);
+      expect(stored, isNot('1234'));
+      expect(stored, hasLength(64)); // SHA-256 hex digest
+      expect(provider.verifyPin('1234'), isTrue);
+    });
+
+    test('migrates a legacy plaintext PIN to a hash on init()', () async {
+      // Simulate a PIN stored in plaintext by an older app version.
+      SharedPreferences.setMockInitialValues({
+        'app_lock_pin': '4321',
+        'app_lock_enabled': true,
+      });
+
+      final provider = AppLockProvider();
+      await provider.init();
+
+      // Still verifies correctly against the original plaintext PIN...
+      expect(provider.verifyPin('4321'), isTrue);
+
+      // ...but is no longer stored in plaintext afterwards.
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getString('app_lock_pin');
+      expect(stored, isNot('4321'));
+      expect(stored, hasLength(64));
+    });
+  });
+
   group('AppLockProvider Lockout & Security Questions', () {
     setUp(() {
       SharedPreferences.setMockInitialValues({});

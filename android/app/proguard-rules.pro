@@ -20,6 +20,38 @@
 # share_plus
 -keep class dev.fluttercommunity.plus.share.** { *; }
 
+# App package — covers MainActivity and the home-screen balance widget
+# receiver (BalanceWidgetProvider), both declared under com.myduit.app.
+# R8 previously stripped MainActivity without this rule.
+-keep class com.myduit.app.** { *; }
+
+# Firebase Analytics / Crashlytics
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
+
+# google_sign_in
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.android.gms.**
+
+# local_auth
+-keep class androidx.biometric.** { *; }
+
+# home_widget
+-keep class es.antonborri.home_widget.** { *; }
+
+# flutter_local_notifications
+-keep class com.dexterous.flutterlocalnotifications.** { *; }
+
+# google_mlkit_text_recognition
+-keep class com.google.mlkit.** { *; }
+-dontwarn com.google.mlkit.**
+
+# image_picker
+-keep class io.flutter.plugins.imagepicker.** { *; }
+
+# printing / pdf export
+-keep class net.nfet.flutter.printing.** { *; }
+
 # Keep annotation
 -keepattributes *Annotation*
 -keepattributes SourceFile,LineNumberTable
