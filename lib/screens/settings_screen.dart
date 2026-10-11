@@ -1267,46 +1267,137 @@ class _CurrencyFormatTile extends StatefulWidget {
 }
 
 class _CurrencyFormatTileState extends State<_CurrencyFormatTile> {
-  late bool _enabled;
+  late NominalSeparator _separator;
 
   @override
   void initState() {
     super.initState();
-    _enabled = CurrencyInputService.isFormatted;
+    _separator = CurrencyInputService.separator;
+  }
+
+  String get _exampleText {
+    switch (_separator) {
+      case NominalSeparator.dot:
+        return 'Seperti: 1.000, 12.000, 1.200.300';
+      case NominalSeparator.comma:
+        return 'Seperti: 1,000, 12,000, 1,200,300';
+      case NominalSeparator.none:
+        return 'Angka biasa tanpa pemisah';
+    }
+  }
+
+  Future<void> _pickSeparator() async {
+    final picked = await showModalBottomSheet<NominalSeparator>(
+      context: context,
+      backgroundColor: widget.isDark ? AppColors.cardDark : AppColors.cardLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => _NominalSeparatorSheet(current: _separator, isDark: widget.isDark),
+    );
+    if (picked != null && picked != _separator) {
+      await CurrencyInputService.setSeparator(picked);
+      setState(() => _separator = picked);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Format nominal diperbarui'),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return _SettingsTile(
       icon: Icons.format_list_numbered_rounded,
-      title: 'Format Input Rupiah',
-      subtitle: _enabled
-          ? 'Seperti: 1.000, 12.000, 1.200.300'
-          : 'Angka biasa tanpa titik',
-      trailing: Switch.adaptive(
-        value: _enabled,
-        onChanged: (val) async {
-          await CurrencyInputService.setFormatted(val);
-          setState(() => _enabled = val);
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  val
-                      ? 'Format Rupiah diaktifkan'
-                      : 'Format Rupiah dinonaktifkan',
+      title: 'Format Input Nominal',
+      subtitle: _exampleText,
+      trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+      onTap: _pickSeparator,
+    );
+  }
+}
+
+class _NominalSeparatorSheet extends StatelessWidget {
+  final NominalSeparator current;
+  final bool isDark;
+  const _NominalSeparatorSheet({required this.current, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = isDark ? AppColors.primaryDark : AppColors.primaryLight;
+
+    Widget option({
+      required NominalSeparator value,
+      required String label,
+      required String example,
+    }) {
+      final isSelected = current == value;
+      return ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        title: Text(
+          label,
+          style: TextStyle(fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500),
+        ),
+        subtitle: Text(example, style: const TextStyle(fontSize: 12)),
+        trailing: isSelected ? Icon(Icons.check_circle_rounded, color: AppColors.income) : null,
+        onTap: () => Navigator.pop(context, value),
+      );
+    }
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.format_list_numbered_rounded, color: accent),
                 ),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                const SizedBox(width: 12),
+                Text('Format Input Nominal', style: Theme.of(context).textTheme.titleLarge),
+              ],
+            ),
+            const SizedBox(height: 16),
+            option(
+              value: NominalSeparator.dot,
+              label: 'Titik',
+              example: '1.000  ·  12.000  ·  1.200.300',
+            ),
+            option(
+              value: NominalSeparator.comma,
+              label: 'Koma',
+              example: '1,000  ·  12,000  ·  1,200,300',
+            ),
+            option(
+              value: NominalSeparator.none,
+              label: 'Tanpa Pemisah',
+              example: '1000  ·  12000  ·  1200300',
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tip: kamu juga bisa ketik singkatan seperti "5jt" atau "500rb" di kolom nominal mana pun.',
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
               ),
-            );
-          }
-        },
-        activeTrackColor: widget.isDark
-            ? AppColors.primaryDark
-            : AppColors.primaryLight,
+            ),
+          ],
+        ),
       ),
     );
   }

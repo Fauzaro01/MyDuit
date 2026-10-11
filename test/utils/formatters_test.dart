@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:myduit/utils/formatters.dart';
 
 void main() {
@@ -193,6 +194,90 @@ void main() {
         final result = DateFormatter.time(date);
         expect(result, '09:05');
       });
+    });
+  });
+
+  group('RupiahInputFormatter.parse', () {
+    test('parses plain digits', () {
+      expect(RupiahInputFormatter.parse('50000'), 50000);
+    });
+
+    test('parses dot-grouped digits', () {
+      expect(RupiahInputFormatter.parse('1.200.300'), 1200300);
+    });
+
+    test('parses comma-grouped digits', () {
+      expect(RupiahInputFormatter.parse('1,200,300'), 1200300);
+    });
+
+    test('returns 0 for empty text', () {
+      expect(RupiahInputFormatter.parse(''), 0);
+    });
+
+    test('parses "5jt" shorthand as 5 million', () {
+      expect(RupiahInputFormatter.parse('5jt'), 5000000);
+    });
+
+    test('parses "2.5jt" shorthand with a decimal', () {
+      expect(RupiahInputFormatter.parse('2.5jt'), 2500000);
+    });
+
+    test('parses "500rb" shorthand as 500 thousand', () {
+      expect(RupiahInputFormatter.parse('500rb'), 500000);
+    });
+
+    test('parses "1,5ribu" shorthand (comma decimal, full suffix)', () {
+      expect(RupiahInputFormatter.parse('1,5ribu'), 1500);
+    });
+
+    test('parses "10juta" shorthand (full word)', () {
+      expect(RupiahInputFormatter.parse('10juta'), 10000000);
+    });
+
+    test('shorthand is case-insensitive', () {
+      expect(RupiahInputFormatter.parse('5JT'), 5000000);
+    });
+  });
+
+  group('CurrencyInputService', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('default separator is dot', () async {
+      await CurrencyInputService.setSeparator(NominalSeparator.dot);
+      expect(CurrencyInputService.separator, NominalSeparator.dot);
+      expect(CurrencyInputService.separatorChar, '.');
+      expect(CurrencyInputService.isFormatted, isTrue);
+    });
+
+    test('comma separator', () async {
+      await CurrencyInputService.setSeparator(NominalSeparator.comma);
+      expect(CurrencyInputService.separatorChar, ',');
+      expect(CurrencyInputService.isFormatted, isTrue);
+    });
+
+    test('none separator disables grouping and isFormatted', () async {
+      await CurrencyInputService.setSeparator(NominalSeparator.none);
+      expect(CurrencyInputService.separatorChar, '');
+      expect(CurrencyInputService.isFormatted, isFalse);
+    });
+
+    test('setFormatted(false) is a shim for none', () async {
+      await CurrencyInputService.setFormatted(false);
+      expect(CurrencyInputService.separator, NominalSeparator.none);
+    });
+
+    test('setFormatted(true) is a shim for dot', () async {
+      await CurrencyInputService.setFormatted(true);
+      expect(CurrencyInputService.separator, NominalSeparator.dot);
+    });
+
+    test('formatNumber uses the current separator', () async {
+      await CurrencyInputService.setSeparator(NominalSeparator.comma);
+      expect(RupiahInputFormatter.formatNumber(1200300), '1,200,300');
+      await CurrencyInputService.setSeparator(NominalSeparator.dot);
+      expect(RupiahInputFormatter.formatNumber(1200300), '1.200.300');
     });
   });
 }

@@ -1,8 +1,27 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../config/app_theme.dart';
 import '../services/financial_calculator_service.dart';
 import '../utils/formatters.dart';
+
+/// Validates a Rupiah-formatted amount field (supports shorthand like
+/// "5jt"). Returns an error message, or null if the value is usable.
+String? _amountFieldError(String text) {
+  if (text.trim().isEmpty) return 'Wajib diisi';
+  if (RupiahInputFormatter.parse(text) <= 0) return 'Harus lebih dari 0';
+  return null;
+}
+
+/// Validates a plain numeric field (percent, years, age — no Rupiah
+/// grouping). [min] defaults to 0 and is exclusive.
+String? _plainFieldError(String text, {double min = 0}) {
+  if (text.trim().isEmpty) return 'Wajib diisi';
+  final value = double.tryParse(text.trim());
+  if (value == null) return 'Angka tidak valid';
+  if (value <= min) return 'Harus > $min';
+  return null;
+}
 
 class FinancialCalculatorScreen extends StatefulWidget {
   const FinancialCalculatorScreen({super.key});
@@ -83,6 +102,9 @@ class _CompoundInterestTabState extends State<_CompoundInterestTab> {
   final _yearsController = TextEditingController(text: '10');
 
   CompoundInterestResult? _result;
+  String? _initialError;
+  String? _returnError;
+  String? _yearsError;
 
   @override
   void initState() {
@@ -91,10 +113,21 @@ class _CompoundInterestTabState extends State<_CompoundInterestTab> {
   }
 
   void _calculate() {
+    // Monthly deposit may legitimately be 0 (lump-sum only), so it has no
+    // "> 0" requirement — only the initial deposit, rate and years do.
+    _initialError = _amountFieldError(_initialController.text);
+    _returnError = _plainFieldError(_returnController.text, min: -100);
+    _yearsError = _plainFieldError(_yearsController.text);
+
+    if (_initialError != null || _returnError != null || _yearsError != null) {
+      setState(() => _result = null);
+      return;
+    }
+
     final initial = RupiahInputFormatter.parse(_initialController.text);
     final monthly = RupiahInputFormatter.parse(_monthlyController.text);
-    final rate = double.tryParse(_returnController.text) ?? 10.0;
-    final years = int.tryParse(_yearsController.text) ?? 10;
+    final rate = double.parse(_returnController.text.trim());
+    final years = double.parse(_yearsController.text.trim()).toInt();
 
     setState(() {
       _result = FinancialCalculatorService.calculateCompoundInterest(
@@ -114,7 +147,7 @@ class _CompoundInterestTabState extends State<_CompoundInterestTab> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        _buildInputField('Setoran Awal (Rp)', _initialController),
+        _buildInputField('Setoran Awal (Rp)', _initialController, errorText: _initialError),
         const SizedBox(height: 12),
         _buildInputField('Setoran Rutin Bulanan (Rp)', _monthlyController),
         const SizedBox(height: 12),
@@ -122,16 +155,22 @@ class _CompoundInterestTabState extends State<_CompoundInterestTab> {
           children: [
             Expanded(
               child: _buildInputField('Imbal Hasil (%/Thn)', _returnController,
-                  isPercent: true),
+                  isPercent: true, errorText: _returnError),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _buildInputField('Jangka Waktu (Tahun)', _yearsController,
-                  isDigits: true),
+                  isDigits: true, errorText: _yearsError),
             ),
           ],
         ),
         const SizedBox(height: 24),
+        if (res == null) ...[
+          Text(
+            'Lengkapi input di atas untuk melihat hasil.',
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+          ),
+        ],
         if (res != null) ...[
           Container(
             padding: const EdgeInsets.all(20),
@@ -184,7 +223,9 @@ class _CompoundInterestTabState extends State<_CompoundInterestTab> {
             'Proyeksi Pertumbuhan Tahunan',
             style: Theme.of(context).textTheme.titleMedium,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
+          _YearlyGrowthChart(breakdown: res.yearlyBreakdown, isDark: isDark),
+          const SizedBox(height: 16),
           ...res.yearlyBreakdown.map((yr) => Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -222,7 +263,7 @@ class _CompoundInterestTabState extends State<_CompoundInterestTab> {
   }
 
   Widget _buildInputField(String label, TextEditingController controller,
-      {bool isPercent = false, bool isDigits = false}) {
+      {bool isPercent = false, bool isDigits = false, String? errorText}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -237,9 +278,88 @@ class _CompoundInterestTabState extends State<_CompoundInterestTab> {
                   ? [RupiahInputFormatter()]
                   : [FilteringTextInputFormatter.digitsOnly],
           onChanged: (_) => _calculate(),
-          decoration: const InputDecoration(isDense: true),
+          decoration: InputDecoration(isDense: true, errorText: errorText),
         ),
       ],
+    );
+  }
+}
+
+/// Stacked bar chart of yearly growth: principal deposited vs interest
+/// earned, one bar per year.
+class _YearlyGrowthChart extends StatelessWidget {
+  final List<YearlyGrowth> breakdown;
+  final bool isDark;
+
+  const _YearlyGrowthChart({required this.breakdown, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    if (breakdown.isEmpty) return const SizedBox.shrink();
+    final maxBalance = breakdown.map((y) => y.balance).reduce((a, b) => a > b ? a : b);
+
+    return SizedBox(
+      height: 180,
+      child: BarChart(
+        BarChartData(
+          maxY: maxBalance * 1.15,
+          alignment: BarChartAlignment.spaceAround,
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          titlesData: FlTitlesData(
+            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, meta) {
+                  final idx = value.toInt();
+                  if (idx < 0 || idx >= breakdown.length) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Y${breakdown[idx].year}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          barTouchData: BarTouchData(
+            touchTooltipData: BarTouchTooltipData(
+              getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                final yr = breakdown[groupIndex];
+                return BarTooltipItem(
+                  'Tahun ${yr.year}\n${CurrencyFormatter.formatCompact(yr.totalDeposits)} modal\n+${CurrencyFormatter.formatCompact(yr.interestEarned)} bunga',
+                  const TextStyle(color: Colors.white, fontSize: 11),
+                );
+              },
+            ),
+          ),
+          barGroups: breakdown.asMap().entries.map((entry) {
+            final yr = entry.value;
+            return BarChartGroupData(
+              x: entry.key,
+              barRods: [
+                BarChartRodData(
+                  toY: yr.balance,
+                  width: 18,
+                  borderRadius: BorderRadius.circular(4),
+                  rodStackItems: [
+                    BarChartRodStackItem(0, yr.totalDeposits, const Color(0xFF0D9373)),
+                    BarChartRodStackItem(yr.totalDeposits, yr.balance, const Color(0xFF34D399)),
+                  ],
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
     );
   }
 }
@@ -258,6 +378,11 @@ class _LoanCalculatorTabState extends State<_LoanCalculatorTab> {
   final _tenureController = TextEditingController(text: '120'); // 10 years
 
   LoanCalculationResult? _result;
+  List<AmortizationYear> _schedule = [];
+  bool _showSchedule = false;
+  String? _principalError;
+  String? _rateError;
+  String? _tenureError;
 
   @override
   void initState() {
@@ -266,12 +391,29 @@ class _LoanCalculatorTabState extends State<_LoanCalculatorTab> {
   }
 
   void _calculate() {
+    _principalError = _amountFieldError(_principalController.text);
+    _rateError = _plainFieldError(_rateController.text, min: -1);
+    _tenureError = _plainFieldError(_tenureController.text);
+
+    if (_principalError != null || _rateError != null || _tenureError != null) {
+      setState(() {
+        _result = null;
+        _schedule = [];
+      });
+      return;
+    }
+
     final principal = RupiahInputFormatter.parse(_principalController.text);
-    final rate = double.tryParse(_rateController.text) ?? 8.5;
-    final months = int.tryParse(_tenureController.text) ?? 120;
+    final rate = double.parse(_rateController.text.trim());
+    final months = double.parse(_tenureController.text.trim()).toInt();
 
     setState(() {
       _result = FinancialCalculatorService.calculateLoan(
+        principal: principal,
+        annualInterestRatePercent: rate,
+        tenureMonths: months,
+      );
+      _schedule = FinancialCalculatorService.calculateAmortizationSchedule(
         principal: principal,
         annualInterestRatePercent: rate,
         tenureMonths: months,
@@ -287,22 +429,28 @@ class _LoanCalculatorTabState extends State<_LoanCalculatorTab> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        _buildField('Pokok Pinjaman (Rp)', _principalController),
+        _buildField('Pokok Pinjaman (Rp)', _principalController, errorText: _principalError),
         const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
               child: _buildField('Suku Bunga (%/Thn)', _rateController,
-                  isDecimal: true),
+                  isDecimal: true, errorText: _rateError),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _buildField('Tenor (Bulan)', _tenureController,
-                  isDigits: true),
+                  isDigits: true, errorText: _tenureError),
             ),
           ],
         ),
         const SizedBox(height: 24),
+        if (res == null) ...[
+          Text(
+            'Lengkapi input di atas untuk melihat hasil.',
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+          ),
+        ],
         if (res != null) ...[
           Container(
             padding: const EdgeInsets.all(20),
@@ -345,13 +493,47 @@ class _LoanCalculatorTabState extends State<_LoanCalculatorTab> {
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          TextButton.icon(
+            onPressed: () => setState(() => _showSchedule = !_showSchedule),
+            icon: Icon(_showSchedule ? Icons.expand_less_rounded : Icons.expand_more_rounded),
+            label: Text(_showSchedule ? 'Sembunyikan Rincian per Tahun' : 'Lihat Rincian per Tahun'),
+          ),
+          if (_showSchedule)
+            ..._schedule.map((yr) => Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.cardDark : AppColors.cardAltLight,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Tahun ke-${yr.year}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Sisa: ${CurrencyFormatter.formatCompact(yr.remainingBalance)}',
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                          ),
+                          Text(
+                            'Pokok ${CurrencyFormatter.formatCompact(yr.principalPaid)} · Bunga ${CurrencyFormatter.formatCompact(yr.interestPaid)}',
+                            style: TextStyle(fontSize: 11, color: Colors.orange.shade700),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                )),
         ],
       ],
     );
   }
 
   Widget _buildField(String label, TextEditingController controller,
-      {bool isDecimal = false, bool isDigits = false}) {
+      {bool isDecimal = false, bool isDigits = false, String? errorText}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -366,7 +548,7 @@ class _LoanCalculatorTabState extends State<_LoanCalculatorTab> {
                   ? [RupiahInputFormatter()]
                   : [FilteringTextInputFormatter.digitsOnly],
           onChanged: (_) => _calculate(),
-          decoration: const InputDecoration(isDense: true),
+          decoration: InputDecoration(isDense: true, errorText: errorText),
         ),
       ],
     );
@@ -387,6 +569,7 @@ class _EmergencyFundTabState extends State<_EmergencyFundTab> {
   int _dependents = 0;
   bool _isFreelancer = false;
   EmergencyFundResult? _result;
+  String? _expenseError;
 
   @override
   void initState() {
@@ -395,6 +578,12 @@ class _EmergencyFundTabState extends State<_EmergencyFundTab> {
   }
 
   void _calculate() {
+    _expenseError = _amountFieldError(_expenseController.text);
+    if (_expenseError != null) {
+      setState(() => _result = null);
+      return;
+    }
+
     final exp = RupiahInputFormatter.parse(_expenseController.text);
     setState(() {
       _result = FinancialCalculatorService.calculateEmergencyFund(
@@ -424,7 +613,7 @@ class _EmergencyFundTabState extends State<_EmergencyFundTab> {
               ? [RupiahInputFormatter()]
               : [FilteringTextInputFormatter.digitsOnly],
           onChanged: (_) => _calculate(),
-          decoration: const InputDecoration(isDense: true),
+          decoration: InputDecoration(isDense: true, errorText: _expenseError),
         ),
         const SizedBox(height: 16),
         SwitchListTile(
@@ -476,6 +665,12 @@ class _EmergencyFundTabState extends State<_EmergencyFundTab> {
           ],
         ),
         const SizedBox(height: 20),
+        if (res == null) ...[
+          Text(
+            'Lengkapi input di atas untuk melihat hasil.',
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+          ),
+        ],
         if (res != null) ...[
           Container(
             padding: const EdgeInsets.all(20),
@@ -533,6 +728,10 @@ class _RetirementTabState extends State<_RetirementTab> {
   final _returnController = TextEditingController(text: '8');
 
   RetirementResult? _result;
+  String? _expError;
+  String? _ageError;
+  String? _retireAgeError;
+  String? _returnError;
 
   @override
   void initState() {
@@ -541,11 +740,28 @@ class _RetirementTabState extends State<_RetirementTab> {
   }
 
   void _calculate() {
+    _expError = _amountFieldError(_monthlyExpController.text);
+    _ageError = _plainFieldError(_ageController.text);
+    _retireAgeError = _plainFieldError(_retireAgeController.text);
+    _returnError = _plainFieldError(_returnController.text, min: -100);
+
+    // Savings may be 0 (starting from scratch), so no amount-field check.
+    if (_retireAgeError == null && _ageError == null) {
+      final age = double.parse(_ageController.text.trim()).toInt();
+      final rAge = double.parse(_retireAgeController.text.trim()).toInt();
+      if (rAge <= age) _retireAgeError = 'Harus > usia saat ini';
+    }
+
+    if (_expError != null || _ageError != null || _retireAgeError != null || _returnError != null) {
+      setState(() => _result = null);
+      return;
+    }
+
     final exp = RupiahInputFormatter.parse(_monthlyExpController.text);
-    final age = int.tryParse(_ageController.text) ?? 28;
-    final rAge = int.tryParse(_retireAgeController.text) ?? 55;
+    final age = double.parse(_ageController.text.trim()).toInt();
+    final rAge = double.parse(_retireAgeController.text.trim()).toInt();
     final savings = RupiahInputFormatter.parse(_savingsController.text);
-    final rate = double.tryParse(_returnController.text) ?? 8.0;
+    final rate = double.parse(_returnController.text.trim());
 
     setState(() {
       _result = FinancialCalculatorService.calculateRetirement(
@@ -567,17 +783,17 @@ class _RetirementTabState extends State<_RetirementTab> {
       padding: const EdgeInsets.all(20),
       children: [
         _buildField('Estimasi Pengeluaran Bulanan Pensiun (Rp)',
-            _monthlyExpController),
+            _monthlyExpController, errorText: _expError),
         const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
-                child:
-                    _buildField('Usia Saat Ini', _ageController, isDigits: true)),
+                child: _buildField('Usia Saat Ini', _ageController,
+                    isDigits: true, errorText: _ageError)),
             const SizedBox(width: 12),
             Expanded(
                 child: _buildField('Target Usia Pensiun', _retireAgeController,
-                    isDigits: true)),
+                    isDigits: true, errorText: _retireAgeError)),
           ],
         ),
         const SizedBox(height: 12),
@@ -585,8 +801,14 @@ class _RetirementTabState extends State<_RetirementTab> {
         const SizedBox(height: 12),
         _buildField(
             'Ekspektasi Return Investasi (%/Thn)', _returnController,
-            isDigits: true),
+            isDigits: true, errorText: _returnError),
         const SizedBox(height: 24),
+        if (res == null) ...[
+          Text(
+            'Lengkapi input di atas untuk melihat hasil.',
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+          ),
+        ],
         if (res != null) ...[
           Container(
             padding: const EdgeInsets.all(20),
@@ -639,7 +861,7 @@ class _RetirementTabState extends State<_RetirementTab> {
   }
 
   Widget _buildField(String label, TextEditingController controller,
-      {bool isDigits = false}) {
+      {bool isDigits = false, String? errorText}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -654,7 +876,7 @@ class _RetirementTabState extends State<_RetirementTab> {
                   ? [RupiahInputFormatter()]
                   : [FilteringTextInputFormatter.digitsOnly],
           onChanged: (_) => _calculate(),
-          decoration: const InputDecoration(isDense: true),
+          decoration: InputDecoration(isDense: true, errorText: errorText),
         ),
       ],
     );
@@ -675,6 +897,9 @@ class _InflationCalculatorTabState extends State<_InflationCalculatorTab> {
   final _yearsController = TextEditingController(text: '10');
 
   InflationResult? _result;
+  String? _amountError;
+  String? _rateError;
+  String? _yearsError;
 
   @override
   void initState() {
@@ -683,9 +908,18 @@ class _InflationCalculatorTabState extends State<_InflationCalculatorTab> {
   }
 
   void _calculate() {
+    _amountError = _amountFieldError(_amountController.text);
+    _rateError = _plainFieldError(_inflationRateController.text, min: -100);
+    _yearsError = _plainFieldError(_yearsController.text);
+
+    if (_amountError != null || _rateError != null || _yearsError != null) {
+      setState(() => _result = null);
+      return;
+    }
+
     final amount = RupiahInputFormatter.parse(_amountController.text);
-    final rate = double.tryParse(_inflationRateController.text) ?? 4.5;
-    final years = int.tryParse(_yearsController.text) ?? 10;
+    final rate = double.parse(_inflationRateController.text.trim());
+    final years = double.parse(_yearsController.text.trim()).toInt();
 
     setState(() {
       _result = FinancialCalculatorService.calculateInflation(
@@ -704,7 +938,7 @@ class _InflationCalculatorTabState extends State<_InflationCalculatorTab> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        _buildField('Nominal Uang Saat Ini (Rp)', _amountController),
+        _buildField('Nominal Uang Saat Ini (Rp)', _amountController, errorText: _amountError),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -713,6 +947,7 @@ class _InflationCalculatorTabState extends State<_InflationCalculatorTab> {
                 'Estimasi Inflasi (%/Thn)',
                 _inflationRateController,
                 isDigits: true,
+                errorText: _rateError,
               ),
             ),
             const SizedBox(width: 12),
@@ -721,11 +956,18 @@ class _InflationCalculatorTabState extends State<_InflationCalculatorTab> {
                 'Jangka Waktu (Tahun)',
                 _yearsController,
                 isDigits: true,
+                errorText: _yearsError,
               ),
             ),
           ],
         ),
         const SizedBox(height: 24),
+        if (res == null) ...[
+          Text(
+            'Lengkapi input di atas untuk melihat hasil.',
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+          ),
+        ],
         if (res != null) ...[
           Container(
             padding: const EdgeInsets.all(20),
@@ -785,7 +1027,7 @@ class _InflationCalculatorTabState extends State<_InflationCalculatorTab> {
   }
 
   Widget _buildField(String label, TextEditingController controller,
-      {bool isDigits = false}) {
+      {bool isDigits = false, String? errorText}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -800,7 +1042,7 @@ class _InflationCalculatorTabState extends State<_InflationCalculatorTab> {
                   ? [RupiahInputFormatter()]
                   : [FilteringTextInputFormatter.digitsOnly],
           onChanged: (_) => _calculate(),
-          decoration: const InputDecoration(isDense: true),
+          decoration: InputDecoration(isDense: true, errorText: errorText),
         ),
       ],
     );

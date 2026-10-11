@@ -37,8 +37,20 @@ class CurrencyFormatter {
   }
 }
 
+/// Matches a complete shorthand amount: "5jt", "2.5jt", "500rb", "1,5ribu".
+final _shorthandComplete = RegExp(r'^(\d+)([.,]\d+)?\s*(jt|juta|rb|ribu)$', caseSensitive: false);
+
+/// Matches a shorthand amount still being typed, so the formatter can leave
+/// it alone instead of stripping the in-progress suffix letters.
+final _shorthandInProgress = RegExp(
+  r'^\d*([.,]\d*)?\s*(j|jt|ju|jut|juta|r|rb|ri|rib|ribu)?$',
+  caseSensitive: false,
+);
+
 /// TextInputFormatter that auto-formats amount input as Indonesian Rupiah.
-/// Digits-only; uses dot (.) as thousands separator.
+/// Digits-only, grouped with [CurrencyInputService.separatorChar] every 3
+/// digits (default dot). Also recognizes shorthand suffixes while typing —
+/// "5jt" / "2.5jt" → 5.000.000, "500rb" → 500.000 — expanded by [parse].
 /// Examples: 1000 → 1.000  |  12000 → 12.000  |  1200300 → 1.200.300
 class RupiahInputFormatter extends TextInputFormatter {
   @override
@@ -46,6 +58,12 @@ class RupiahInputFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
+    // Let a shorthand amount (complete or still being typed) through as-is;
+    // parse() expands it once the user is done.
+    if (_shorthandInProgress.hasMatch(newValue.text)) {
+      return newValue;
+    }
+
     // Strip all non-digits
     final digits = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
 
@@ -59,7 +77,7 @@ class RupiahInputFormatter extends TextInputFormatter {
     // Remove leading zeros
     final stripped = digits.replaceFirst(RegExp(r'^0+'), '');
     final clean = stripped.isEmpty ? '0' : stripped;
-    final formatted = _addDots(clean);
+    final formatted = _addSeparators(clean);
 
     return newValue.copyWith(
       text: formatted,
@@ -67,18 +85,31 @@ class RupiahInputFormatter extends TextInputFormatter {
     );
   }
 
-  /// Add dot separator every 3 digits from right
-  static String _addDots(String digits) {
+  /// Add the configured thousands separator every 3 digits from the right.
+  static String _addSeparators(String digits) {
+    final sep = CurrencyInputService.separatorChar;
+    if (sep.isEmpty) return digits;
     final buf = StringBuffer();
     for (int i = 0; i < digits.length; i++) {
-      if (i > 0 && (digits.length - i) % 3 == 0) buf.write('.');
+      if (i > 0 && (digits.length - i) % 3 == 0) buf.write(sep);
       buf.write(digits[i]);
     }
     return buf.toString();
   }
 
-  /// Strip formatting and parse to double (handles both 1.200 and 1200, strips CR/DB/Rp).
+  /// Strip formatting and parse to double. Handles grouped numbers (1.200 or
+  /// 1,200 depending on separator), plain digits, and shorthand suffixes
+  /// ("5jt" → 5000000, "2.5jt" → 2500000, "500rb" → 500000).
   static double parse(String text) {
+    final trimmed = text.trim();
+    final shorthand = _shorthandComplete.firstMatch(trimmed);
+    if (shorthand != null) {
+      final decimalPart = shorthand.group(2)?.replaceFirst(',', '.') ?? '';
+      final value = double.tryParse('${shorthand.group(1)}$decimalPart') ?? 0;
+      final isJuta = shorthand.group(3)!.toLowerCase().startsWith('j');
+      return value * (isJuta ? 1000000.0 : 1000.0);
+    }
+
     final clean = text.replaceAll(RegExp(r'[^\d\-]'), '');
     if (clean.isEmpty) return 0;
     return double.tryParse(clean) ?? 0;
@@ -86,36 +117,64 @@ class RupiahInputFormatter extends TextInputFormatter {
 
   /// Format a double as Rupiah input string for pre-filling text fields.
   static String formatNumber(double amount) {
-    return _addDots(amount.toStringAsFixed(0));
+    return _addSeparators(amount.toStringAsFixed(0));
   }
 }
 
-/// Service to persist and cache the currency input formatting preference.
-/// Always call [load] at app startup before accessing [isFormatted].
+/// Thousands-separator style for nominal (amount) input fields.
+enum NominalSeparator { dot, comma, none }
+
+/// Service to persist and cache the nominal input formatting preference.
+/// Always call [load] at app startup before accessing [separator]/[isFormatted].
 class CurrencyInputService {
-  static const _prefKey = 'currency_input_formatted';
+  static const _legacyBoolKey = 'currency_input_formatted';
+  static const _separatorKey = 'currency_input_separator';
 
-  /// Cached value — true means use formatted (1.000, 12.000) input.
-  static bool _isFormatted = true; // default ON
+  static NominalSeparator _separator = NominalSeparator.dot; // default ON (dot)
 
-  /// Synchronous getter for the cached preference.
-  static bool get isFormatted => _isFormatted;
+  /// Current separator style.
+  static NominalSeparator get separator => _separator;
+
+  /// Backward-compatible: true means some separator is active (not "none").
+  static bool get isFormatted => _separator != NominalSeparator.none;
+
+  /// The literal character inserted between digit groups, or '' for none.
+  static String get separatorChar => switch (_separator) {
+        NominalSeparator.dot => '.',
+        NominalSeparator.comma => ',',
+        NominalSeparator.none => '',
+      };
 
   /// Load preference from SharedPreferences. Call once at app startup.
   static Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _isFormatted = prefs.getBool(_prefKey) ?? true;
+      final saved = prefs.getString(_separatorKey);
+      if (saved != null) {
+        _separator = NominalSeparator.values.firstWhere(
+          (e) => e.name == saved,
+          orElse: () => NominalSeparator.dot,
+        );
+      } else {
+        // Migrate from the old plain on/off preference, if present.
+        final legacy = prefs.getBool(_legacyBoolKey);
+        _separator = legacy == false ? NominalSeparator.none : NominalSeparator.dot;
+      }
     } catch (_) {}
   }
 
   /// Save and update the cached preference.
-  static Future<void> setFormatted(bool value) async {
-    _isFormatted = value;
+  static Future<void> setSeparator(NominalSeparator value) async {
+    _separator = value;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_prefKey, value);
+      await prefs.setString(_separatorKey, value.name);
     } catch (_) {}
+  }
+
+  /// Backward-compatible shim: true → dot, false → none.
+  static Future<void> setFormatted(bool value) async {
+    await setSeparator(value ? NominalSeparator.dot : NominalSeparator.none);
   }
 }
 

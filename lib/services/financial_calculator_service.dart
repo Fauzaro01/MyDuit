@@ -40,6 +40,20 @@ class LoanCalculationResult {
   });
 }
 
+class AmortizationYear {
+  final int year;
+  final double remainingBalance;
+  final double principalPaid;
+  final double interestPaid;
+
+  AmortizationYear({
+    required this.year,
+    required this.remainingBalance,
+    required this.principalPaid,
+    required this.interestPaid,
+  });
+}
+
 class EmergencyFundResult {
   final double targetAmount;
   final int recommendedMonths;
@@ -160,6 +174,49 @@ class FinancialCalculatorService {
       totalPayment: totalPayment,
       totalInterest: totalInterest.clamp(0.0, double.infinity),
     );
+  }
+
+  /// Year-by-year amortization: how much of each year's payments go to
+  /// principal vs interest, and the remaining balance at each year's end.
+  static List<AmortizationYear> calculateAmortizationSchedule({
+    required double principal,
+    required double annualInterestRatePercent,
+    required int tenureMonths,
+  }) {
+    if (principal <= 0 || tenureMonths <= 0) return [];
+
+    final loan = calculateLoan(
+      principal: principal,
+      annualInterestRatePercent: annualInterestRatePercent,
+      tenureMonths: tenureMonths,
+    );
+    final monthlyRate = (annualInterestRatePercent / 100.0) / 12.0;
+
+    double balance = principal;
+    double yearPrincipal = 0;
+    double yearInterest = 0;
+    final List<AmortizationYear> schedule = [];
+
+    for (int m = 1; m <= tenureMonths; m++) {
+      final interestPortion = balance * monthlyRate;
+      final principalPortion = (loan.monthlyPayment - interestPortion).clamp(0.0, balance);
+      balance -= principalPortion;
+      yearPrincipal += principalPortion;
+      yearInterest += interestPortion;
+
+      if (m % 12 == 0 || m == tenureMonths) {
+        schedule.add(AmortizationYear(
+          year: (m / 12).ceil(),
+          remainingBalance: balance.clamp(0.0, double.infinity),
+          principalPaid: yearPrincipal,
+          interestPaid: yearInterest,
+        ));
+        yearPrincipal = 0;
+        yearInterest = 0;
+      }
+    }
+
+    return schedule;
   }
 
   /// Calculate emergency fund recommendation

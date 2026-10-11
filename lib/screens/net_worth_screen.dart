@@ -1,4 +1,6 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../models/asset_model.dart';
@@ -8,14 +10,35 @@ import '../providers/debt_provider.dart';
 import '../services/net_worth_service.dart';
 import '../utils/formatters.dart';
 
+Color _assetTypeColor(AssetType type) {
+  switch (type) {
+    case AssetType.cash:
+      return const Color(0xFF10B981);
+    case AssetType.gold:
+      return const Color(0xFFF59E0B);
+    case AssetType.mutualFund:
+      return const Color(0xFF3B82F6);
+    case AssetType.stock:
+      return const Color(0xFF8B5CF6);
+    case AssetType.deposit:
+      return const Color(0xFF06B6D4);
+    case AssetType.property:
+      return const Color(0xFFEC4899);
+    case AssetType.crypto:
+      return const Color(0xFFF97316);
+    case AssetType.other:
+      return const Color(0xFF6B7280);
+  }
+}
+
 class NetWorthScreen extends StatelessWidget {
   const NetWorthScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final assetProvider = context.watch<AssetProvider>();
-    final walletProvider = Provider.of<WalletProvider?>(context);
-    final debtProvider = Provider.of<DebtProvider?>(context);
+    final walletProvider = context.watch<WalletProvider?>();
+    final debtProvider = context.watch<DebtProvider?>();
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -31,7 +54,7 @@ class NetWorthScreen extends StatelessWidget {
         title: const Text('Kekayaan Bersih (Net Worth)'),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddAssetDialog(context),
+        onPressed: () => _showAssetFormSheet(context, isDark),
         icon: const Icon(Icons.add_rounded),
         label: const Text('Tambah Aset'),
       ),
@@ -142,6 +165,14 @@ class NetWorthScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
+          // Asset category breakdown pie chart
+          if (assetProvider.assets.isNotEmpty) ...[
+            Text('Komposisi Aset per Kategori', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            _AssetBreakdownChart(breakdown: assetProvider.assetBreakdown, isDark: isDark),
+            const SizedBox(height: 24),
+          ],
+
           // Detailed Asset Items
           Text('Rincian Aset Investasi', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
@@ -175,7 +206,7 @@ class NetWorthScreen extends StatelessWidget {
                     ),
                   ),
                   onTap: () => _showAssetValuationSheet(context, a, isDark),
-                  onLongPress: () => _confirmDeleteAsset(context, a),
+                  onLongPress: () => _showAssetActionsSheet(context, a, isDark),
                 ),
               );
             }),
@@ -247,6 +278,48 @@ class NetWorthScreen extends StatelessWidget {
     );
   }
 
+  void _showAssetActionsSheet(BuildContext context, AssetModel asset, bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Text(asset.type.emoji, style: const TextStyle(fontSize: 22)),
+                title: Text(asset.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(CurrencyFormatter.format(asset.amount)),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit Aset'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showAssetFormSheet(context, isDark, existing: asset);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.delete_outline_rounded, color: AppColors.expense),
+                title: Text('Hapus Aset', style: TextStyle(color: AppColors.expense)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirmDeleteAsset(context, asset);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _confirmDeleteAsset(BuildContext context, AssetModel asset) {
     showDialog(
       context: context,
@@ -267,10 +340,19 @@ class NetWorthScreen extends StatelessWidget {
     );
   }
 
-  void _showAddAssetDialog(BuildContext context) {
-    final nameController = TextEditingController();
-    final amountController = TextEditingController();
-    AssetType type = AssetType.gold;
+  /// Add/edit form for an asset. Pass [existing] to edit in place instead of
+  /// creating a new one.
+  void _showAssetFormSheet(BuildContext context, bool isDark, {AssetModel? existing}) {
+    final isEditing = existing != null;
+    final nameController = TextEditingController(text: existing?.name ?? '');
+    final amountController = TextEditingController(
+      text: existing == null
+          ? ''
+          : (CurrencyInputService.isFormatted
+              ? RupiahInputFormatter.formatNumber(existing.amount)
+              : existing.amount.toStringAsFixed(0)),
+    );
+    AssetType type = existing?.type ?? AssetType.gold;
 
     showModalBottomSheet(
       context: context,
@@ -292,9 +374,9 @@ class NetWorthScreen extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Tambah Aset / Portofolio Investasi',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  Text(
+                    isEditing ? 'Edit Aset / Portofolio Investasi' : 'Tambah Aset / Portofolio Investasi',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -325,9 +407,13 @@ class NetWorthScreen extends StatelessWidget {
                   TextField(
                     controller: amountController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Estimasi Nilai Total (Rp)',
-                      border: OutlineInputBorder(),
+                    inputFormatters: CurrencyInputService.isFormatted
+                        ? [RupiahInputFormatter()]
+                        : [FilteringTextInputFormatter.digitsOnly],
+                    decoration: InputDecoration(
+                      labelText: 'Estimasi Nilai Total',
+                      prefixText: CurrencyInputService.isFormatted ? 'Rp ' : null,
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -337,17 +423,31 @@ class NetWorthScreen extends StatelessWidget {
                       onPressed: () {
                         final name = nameController.text.trim();
                         final amount = RupiahInputFormatter.parse(amountController.text);
-                        if (name.isEmpty || amount <= 0) return;
+                        if (name.isEmpty) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(content: Text('Nama aset tidak boleh kosong')),
+                          );
+                          return;
+                        }
+                        if (amount <= 0) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(content: Text('Nilai aset harus lebih dari 0')),
+                          );
+                          return;
+                        }
 
-                        final asset = AssetModel(
-                          name: name,
-                          type: type,
-                          amount: amount,
-                        );
-                        context.read<AssetProvider>().addAsset(asset);
+                        if (isEditing) {
+                          context.read<AssetProvider>().updateAsset(
+                                existing.copyWith(name: name, type: type, amount: amount),
+                              );
+                        } else {
+                          context.read<AssetProvider>().addAsset(
+                                AssetModel(name: name, type: type, amount: amount),
+                              );
+                        }
                         Navigator.pop(ctx);
                       },
-                      child: const Text('Simpan Aset'),
+                      child: Text(isEditing ? 'Simpan Perubahan' : 'Simpan Aset'),
                     ),
                   ),
                 ],
@@ -495,6 +595,93 @@ class NetWorthScreen extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _AssetBreakdownChart extends StatelessWidget {
+  final Map<AssetType, double> breakdown;
+  final bool isDark;
+
+  const _AssetBreakdownChart({required this.breakdown, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = breakdown.values.fold(0.0, (a, b) => a + b);
+    final entries = breakdown.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.cardDark : AppColors.cardLight,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 120,
+            height: 120,
+            child: PieChart(
+              PieChartData(
+                sectionsSpace: 2,
+                centerSpaceRadius: 28,
+                sections: entries.map((e) {
+                  final pct = total > 0 ? (e.value / total * 100) : 0.0;
+                  return PieChartSectionData(
+                    color: _assetTypeColor(e.key),
+                    value: e.value,
+                    title: pct >= 8 ? '${pct.toStringAsFixed(0)}%' : '',
+                    titleStyle: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                    radius: 32,
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: entries.map((e) {
+                final pct = total > 0 ? (e.value / total * 100) : 0.0;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: _assetTypeColor(e.key),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${e.key.emoji} ${e.key.label}',
+                          style: const TextStyle(fontSize: 11),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        '${pct.toStringAsFixed(0)}%',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
