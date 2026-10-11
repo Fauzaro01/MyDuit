@@ -100,6 +100,7 @@ void main() {
         tagProvider = TagProvider();
         subscriptionProvider = SubscriptionProvider();
         assetProvider = AssetProvider();
+        assetProvider.loadAssets(); // Deferred: same reason
         templateProvider = TemplateProvider();
         templateProvider.loadTemplates(); // Deferred: same reason
 
