@@ -18,6 +18,8 @@ class _BudgetItem {
   final String icon;
   final double spent;
   final BudgetModel budget;
+  final double rollover;
+  final double effectiveLimit;
 
   const _BudgetItem({
     required this.category,
@@ -26,6 +28,8 @@ class _BudgetItem {
     required this.icon,
     required this.spent,
     required this.budget,
+    required this.rollover,
+    required this.effectiveLimit,
   });
 }
 
@@ -64,6 +68,8 @@ class BudgetScreen extends StatelessWidget {
         ),
       );
       final spent = expenseTotals[cat] ?? 0;
+      final rollover = provider.getRollover(budget);
+      final effectiveLimit = provider.getEffectiveLimit(budget);
       budgetItems.add(_BudgetItem(
         category: cat,
         customCategoryId: null,
@@ -71,6 +77,8 @@ class BudgetScreen extends StatelessWidget {
         icon: cat.icon,
         spent: spent,
         budget: budget,
+        rollover: rollover,
+        effectiveLimit: effectiveLimit,
       ));
     }
 
@@ -86,6 +94,8 @@ class BudgetScreen extends StatelessWidget {
         ),
       );
       final spent = customExpenseTotals[customCat.id] ?? 0;
+      final rollover = provider.getRollover(budget);
+      final effectiveLimit = provider.getEffectiveLimit(budget);
       budgetItems.add(_BudgetItem(
         category: TransactionCategory.other,
         customCategoryId: customCat.id,
@@ -93,6 +103,8 @@ class BudgetScreen extends StatelessWidget {
         icon: customCat.emoji,
         spent: spent,
         budget: budget,
+        rollover: rollover,
+        effectiveLimit: effectiveLimit,
       ));
     }
 
@@ -100,7 +112,7 @@ class BudgetScreen extends StatelessWidget {
     double totalBudget = 0;
     double totalSpent = 0;
     for (final item in budgetItems) {
-      totalBudget += item.budget.monthlyLimit;
+      totalBudget += item.effectiveLimit;
       totalSpent += item.spent;
     }
 
@@ -295,6 +307,8 @@ class BudgetScreen extends StatelessWidget {
                       icon: item.icon,
                       spent: item.spent,
                       budget: item.budget,
+                      rollover: item.rollover,
+                      effectiveLimit: item.effectiveLimit,
                       isDark: isDark,
                       onSetBudget: () => _showSetBudgetDialog(
                         context,
@@ -613,6 +627,8 @@ class _BudgetCategoryTile extends StatelessWidget {
   final String icon;
   final double spent;
   final BudgetModel budget;
+  final double rollover;
+  final double effectiveLimit;
   final bool isDark;
   final VoidCallback onSetBudget;
 
@@ -621,6 +637,8 @@ class _BudgetCategoryTile extends StatelessWidget {
     required this.icon,
     required this.spent,
     required this.budget,
+    required this.rollover,
+    required this.effectiveLimit,
     required this.isDark,
     required this.onSetBudget,
   });
@@ -628,11 +646,11 @@ class _BudgetCategoryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasBudget = budget.monthlyLimit > 0;
+    final hasBudget = effectiveLimit > 0;
     final percentage = hasBudget
-        ? (spent / budget.monthlyLimit * 100).clamp(0.0, 150.0)
+        ? (spent / effectiveLimit * 100).clamp(0.0, 150.0)
         : 0.0;
-    final isOver = hasBudget && spent > budget.monthlyLimit;
+    final isOver = hasBudget && spent > effectiveLimit;
 
     final barColor = isOver
         ? AppColors.expense
@@ -702,13 +720,15 @@ class _BudgetCategoryTile extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.blueAccent.withValues(alpha: 0.15),
+                                color: (rollover > 0 ? AppColors.income : Colors.blueAccent).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(6),
                               ),
-                              child: const Text(
-                                'Rollover',
+                              child: Text(
+                                rollover > 0
+                                    ? '+${CurrencyFormatter.formatCompact(rollover)} rollover'
+                                    : 'Rollover',
                                 style: TextStyle(
-                                  color: Colors.blueAccent,
+                                  color: rollover > 0 ? AppColors.income : Colors.blueAccent,
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -720,7 +740,7 @@ class _BudgetCategoryTile extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         hasBudget
-                            ? '${CurrencyFormatter.formatCompact(spent)} / ${CurrencyFormatter.formatCompact(budget.monthlyLimit)}'
+                            ? '${CurrencyFormatter.formatCompact(spent)} / ${CurrencyFormatter.formatCompact(effectiveLimit)}'
                             : 'Belum diatur',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontSize: 12,

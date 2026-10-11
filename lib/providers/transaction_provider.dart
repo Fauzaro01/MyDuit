@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/transaction_model.dart';
 import '../models/budget_model.dart';
 import '../services/database_service.dart';
+import '../services/budget_rollover_service.dart';
+import '../services/notification_service.dart';
 import 'wallet_provider.dart';
 
 class TransactionProvider extends ChangeNotifier {
@@ -51,6 +53,17 @@ class TransactionProvider extends ChangeNotifier {
   // ── Budget ──
   List<BudgetModel> _budgets = [];
   List<BudgetModel> get budgets => _budgets;
+  Map<String, double> _rolloverAmounts = {};
+  Map<String, double> get rolloverAmounts => _rolloverAmounts;
+
+  String _budgetKey(BudgetModel b) =>
+      '${b.category.name}_${b.customCategoryId ?? "null"}';
+
+  double getRollover(BudgetModel budget) =>
+      _rolloverAmounts[_budgetKey(budget)] ?? 0.0;
+
+  double getEffectiveLimit(BudgetModel budget) =>
+      budget.monthlyLimit + getRollover(budget);
 
   // ── Search ──
   String _searchQuery = '';
@@ -113,6 +126,7 @@ class TransactionProvider extends ChangeNotifier {
     _incomeCustomTotals = results[5] as Map<String, double>;
     _expenseCustomTotals = results[6] as Map<String, double>;
     _budgets = results[7] as List<BudgetModel>;
+    await _computeRollovers();
 
     _isLoading = false;
     notifyListeners();
@@ -122,13 +136,72 @@ class TransactionProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> _computeRollovers() async {
+    final hasRollover = _budgets.any((b) => b.isRollover);
+    if (!hasRollover) {
+      _rolloverAmounts = {};
+      return;
+    }
+    final (prevYear, prevMonth) =
+        BudgetRolloverService.getPreviousPeriod(_selectedYear, _selectedMonth);
+    final prevTx =
+        await _dbService.getTransactionsByMonth(prevYear, prevMonth);
+    final prevBudgets =
+        await _dbService.getBudgets(prevYear, prevMonth);
+
+    final map = <String, double>{};
+    for (final budget in _budgets) {
+      if (budget.isRollover) {
+        final prevB = prevBudgets.where((pb) =>
+            pb.category == budget.category &&
+            pb.customCategoryId == budget.customCategoryId).firstOrNull;
+        final surplus = BudgetRolloverService.calculateRollover(
+          budget: budget,
+          previousMonthTransactions: prevTx,
+          previousMonthLimit: prevB?.monthlyLimit ?? 0.0,
+        );
+        map[_budgetKey(budget)] = surplus;
+      } else {
+        map[_budgetKey(budget)] = 0.0;
+      }
+    }
+    _rolloverAmounts = map;
+  }
+
   Future<void> _loadBudgets() async {
     _budgets = await _dbService.getBudgets(_selectedYear, _selectedMonth);
+    await _computeRollovers();
     notifyListeners();
   }
 
   // ── Transaction CRUD ──
   Future<void> addTransaction(TransactionModel transaction) async {
+    // Check proactive budget alert before state update
+    if (transaction.type == TransactionType.expense) {
+      try {
+        final matchingBudget = _budgets.where((b) =>
+            b.category == transaction.category &&
+            b.customCategoryId == transaction.customCategoryId).firstOrNull;
+        if (matchingBudget != null && matchingBudget.monthlyLimit > 0) {
+          final effectiveLimit = getEffectiveLimit(matchingBudget);
+          final currentSpent = (transaction.customCategoryId != null
+                  ? _expenseCustomTotals[transaction.customCategoryId]
+                  : _expenseCategoryTotals[transaction.category]) ??
+              0.0;
+          final newSpent = currentSpent + transaction.amount;
+          if (currentSpent <= effectiveLimit && newSpent > effectiveLimit) {
+            NotificationService.showBudgetExceededAlert(
+              categoryName: transaction.category.label,
+              spent: newSpent,
+              limit: effectiveLimit,
+            );
+          }
+        }
+      } catch (_) {
+        // Non-fatal notification failure
+      }
+    }
+
     await _dbService.insertTransaction(transaction);
     await loadData();
     _walletProvider?.refreshBalances();

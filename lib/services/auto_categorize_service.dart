@@ -5,10 +5,15 @@ class AutoCategorizeSuggestion {
   final TransactionType type;
   final double confidence;
 
+  /// The keyword that triggered this match, kept for transparency/debugging
+  /// (e.g. showing the user *why* a category was suggested).
+  final String? matchedKeyword;
+
   const AutoCategorizeSuggestion({
     required this.category,
     required this.type,
     this.confidence = 1.0,
+    this.matchedKeyword,
   });
 }
 
@@ -185,13 +190,13 @@ class AutoCategorizeService {
     if (clean.isEmpty) return null;
 
     // Check income keywords
-    for (final entry in _incomeKeywords.entries) {
-      if (clean.contains(entry.key)) {
-        return AutoCategorizeSuggestion(
-          category: entry.value,
-          type: TransactionType.income,
-        );
-      }
+    final incomeMatch = _bestMatch(clean, _incomeKeywords);
+    if (incomeMatch != null) {
+      return AutoCategorizeSuggestion(
+        category: incomeMatch.value,
+        type: TransactionType.income,
+        matchedKeyword: incomeMatch.key,
+      );
     }
 
     // Check expense keywords
@@ -205,15 +210,43 @@ class AutoCategorizeService {
       ..._educationKeywords,
     };
 
-    for (final entry in allExpenseKeywords.entries) {
-      if (clean.contains(entry.key)) {
-        return AutoCategorizeSuggestion(
-          category: entry.value,
-          type: TransactionType.expense,
-        );
-      }
+    final expenseMatch = _bestMatch(clean, allExpenseKeywords);
+    if (expenseMatch != null) {
+      return AutoCategorizeSuggestion(
+        category: expenseMatch.value,
+        type: TransactionType.expense,
+        matchedKeyword: expenseMatch.key,
+      );
     }
 
     return null;
+  }
+
+  /// Finds the most specific (longest) keyword that matches [text] as a
+  /// whole word. Word-boundary matching avoids short keywords (e.g. "air",
+  /// "tol") false-matching inside unrelated words, and preferring the
+  /// longest match resolves ties when more than one category's keyword
+  /// is present in the text (the most specific keyword wins).
+  static MapEntry<String, TransactionCategory>? _bestMatch(
+    String text,
+    Map<String, TransactionCategory> keywords,
+  ) {
+    MapEntry<String, TransactionCategory>? best;
+    for (final entry in keywords.entries) {
+      if (_matchesWholeWord(text, entry.key)) {
+        if (best == null || entry.key.length > best.key.length) {
+          best = entry;
+        }
+      }
+    }
+    return best;
+  }
+
+  static bool _matchesWholeWord(String text, String keyword) {
+    final pattern = RegExp(
+      '\\b${RegExp.escape(keyword)}\\b',
+      caseSensitive: false,
+    );
+    return pattern.hasMatch(text);
   }
 }

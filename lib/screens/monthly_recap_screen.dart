@@ -204,9 +204,45 @@ class _MonthlyRecapScreenState extends State<MonthlyRecapScreen> {
             color: Colors.amber,
             title: 'Hari Paling Banyak Belanja',
             value: 'Tanggal ${recap.mostExpensiveDayOfMonth}',
-            subtitle: 'Total: ${CurrencyFormatter.format(recap.mostExpensiveDayAmount)}',
+            subtitle:
+                'Total: ${CurrencyFormatter.format(recap.mostExpensiveDayAmount)}',
             isDark: isDark,
           ),
+          const SizedBox(height: 10),
+          _HighlightTile(
+            icon: Icons.savings_rounded,
+            color: Colors.teal,
+            title: 'Hari Paling Hemat',
+            value: 'Tanggal ${recap.mostFrugalDayOfMonth}',
+            subtitle: 'Hari dengan pengeluaran paling minim bulan ini',
+            isDark: isDark,
+          ),
+          if (recap.totalBudgetsCount > 0) ...[
+            const SizedBox(height: 10),
+            _HighlightTile(
+              icon: Icons.track_changes_rounded,
+              color: Colors.green,
+              title: 'Kepatuhan Anggaran',
+              value:
+                  '${recap.budgetsKeptCount} dari ${recap.totalBudgetsCount} Kategori Terkendali',
+              subtitle: recap.budgetsKeptCount == recap.totalBudgetsCount
+                  ? 'Hebat! Semua anggaran belanja terjaga di bawah batas.'
+                  : '${recap.totalBudgetsCount - recap.budgetsKeptCount} pos anggaran melebihi batas.',
+              isDark: isDark,
+            ),
+          ],
+          if (recap.completedGoalsCount + recap.activeGoalsCount > 0) ...[
+            const SizedBox(height: 10),
+            _HighlightTile(
+              icon: Icons.flag_rounded,
+              color: Colors.indigo,
+              title: 'Target Menabung',
+              value:
+                  '${recap.completedGoalsCount} Tercapai • ${recap.activeGoalsCount} Berjalan',
+              subtitle: 'Pantau impian finansial Anda secara konsisten.',
+              isDark: isDark,
+            ),
+          ],
           const SizedBox(height: 10),
           _HighlightTile(
             icon: Icons.receipt_long_rounded,

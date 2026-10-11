@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../models/receipt_data.dart';
@@ -14,6 +15,8 @@ import '../providers/tag_provider.dart';
 import '../services/receipt_parser_service.dart';
 import '../services/auto_categorize_service.dart';
 import '../services/analytics_service.dart';
+import '../services/ocr_service.dart';
+import '../services/receipt_validation_service.dart';
 import '../utils/formatters.dart';
 
 class AddTransactionScreen extends StatefulWidget {
@@ -48,6 +51,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool _isEditing = false;
   WalletModel? _selectedWallet;
   List<String> _tags = [];
+  bool _isProcessingReceipt = false;
 
   @override
   void initState() {
@@ -293,22 +297,35 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ],
               ),
             ),
-            if (!isIncome && RupiahInputFormatter.parse(_amountController.text) >= 1000000) ...[
+            if (!isIncome &&
+                RupiahInputFormatter.parse(_amountController.text) >=
+                    1000000) ...[
               const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   children: const [
-                    Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFFF59E0B)),
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 16,
+                      color: Color(0xFFF59E0B),
+                    ),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Peringatan Pengeluaran Besar (≥ Rp 1.000.000)',
-                        style: TextStyle(fontSize: 11, color: Color(0xFFF59E0B), fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFFF59E0B),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
@@ -344,11 +361,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 final suggestions = txProvider.transactions
                     .where((t) => t.type == _type)
                     .map((t) => t.title.trim())
-                    .where((t) =>
-                        t.isNotEmpty &&
-                        (query.isEmpty ||
-                            (t.toLowerCase().contains(query) &&
-                                t.toLowerCase() != query)))
+                    .where(
+                      (t) =>
+                          t.isNotEmpty &&
+                          (query.isEmpty ||
+                              (t.toLowerCase().contains(query) &&
+                                  t.toLowerCase() != query)),
+                    )
                     .toSet()
                     .take(5)
                     .toList();
@@ -402,8 +421,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     Provider.of<CustomCategoryProvider?>(context);
                 final customCats = customCategoryProvider != null
                     ? (isIncome
-                        ? customCategoryProvider.incomeCategories
-                        : customCategoryProvider.expenseCategories)
+                          ? customCategoryProvider.incomeCategories
+                          : customCategoryProvider.expenseCategories)
                     : const [];
                 final accentColor = isIncome
                     ? AppColors.income
@@ -442,7 +461,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(cat.icon, style: const TextStyle(fontSize: 18)),
+                              Text(
+                                cat.icon,
+                                style: const TextStyle(fontSize: 18),
+                              ),
                               const SizedBox(width: 6),
                               Text(
                                 cat.label,
@@ -559,7 +581,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             const SizedBox(height: 20),
 
             // Tag / Project label
-            Text('Tag & Label (#Proyek/Tag)', style: theme.textTheme.labelLarge),
+            Text(
+              'Tag & Label (#Proyek/Tag)',
+              style: theme.textTheme.labelLarge,
+            ),
             const SizedBox(height: 8),
             _buildTagSection(context, isDark),
             const SizedBox(height: 20),
@@ -771,6 +796,101 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
   }
 
+  Future<void> _processReceiptImage(
+    BuildContext context,
+    ImageSource source,
+    bool isDark,
+  ) async {
+    // Guard against a double-tap / re-entrant scan corrupting state while
+    // one scan is already in flight.
+    if (_isProcessingReceipt) return;
+
+    bool dialogShown = false;
+    setState(() => _isProcessingReceipt = true);
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: source);
+      if (pickedFile == null) return;
+
+      if (!context.mounted) return;
+      dialogShown = true;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.cardDark : AppColors.cardLight,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+                const SizedBox(width: 16),
+                Text(
+                  'Memindai struk...',
+                  style: Theme.of(
+                    ctx,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final result = await OcrService.recognizeText(pickedFile.path);
+
+      if (!context.mounted) return;
+      if (dialogShown) {
+        Navigator.of(context, rootNavigator: true).pop();
+        dialogShown = false;
+      }
+
+      switch (result) {
+        case OcrEmpty():
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Teks struk tidak terbaca dengan jelas. Coba foto ulang di tempat terang atau tempel teks manual.',
+              ),
+              backgroundColor: AppColors.expense,
+            ),
+          );
+        case OcrFailure(message: final message):
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: AppColors.expense,
+            ),
+          );
+        case OcrSuccess(text: final text):
+          final parsed = ReceiptParserService.parse(text);
+          _showReceiptPreviewSheet(context, parsed, isDark);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal membuka kamera/galeri: ${e.runtimeType}'),
+            backgroundColor: AppColors.expense,
+          ),
+        );
+      }
+    } finally {
+      if (dialogShown && context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      if (mounted) setState(() => _isProcessingReceipt = false);
+    }
+  }
+
   void _showReceiptScanSheet(BuildContext context, bool isDark) {
     final textController = TextEditingController();
 
@@ -788,60 +908,132 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           top: 20,
           bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.document_scanner_rounded,
-                  color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Smart Receipt Parser',
-                  style: Theme.of(ctx).textTheme.titleLarge,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Tempel teks struk belanja (Indomaret, Alfamart, Starbucks, SPBU, resto, tagihan, dll). Mesin on-device akan mengekstrak merchant, nominal, rincian barang, pajak, diskon, dan metode pembayaran.',
-              style: Theme.of(ctx).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: textController,
-              maxLines: 6,
-              decoration: const InputDecoration(
-                hintText: 'Contoh:\nINDOMARET KEMANG\n12/09/2026\n2x Susu UHT Rp 14.000\n1x Roti Tawar 15.000\nDiskon Member 2.000\nPPN 11% 2.970\nTotal Rp 29.970\nTunai Rp 50.000',
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.document_scanner_rounded,
+                    color: isDark
+                        ? AppColors.primaryDark
+                        : AppColors.primaryLight,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Smart Receipt Parser',
+                    style: Theme.of(ctx).textTheme.titleLarge,
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Batal'),
+              const SizedBox(height: 8),
+              Text(
+                'Pindai struk fisik dengan kamera/galeri atau tempel teks manual. Mesin on-device akan mengekstrak merchant, nominal, item, dan kategori otomatis.',
+                style: Theme.of(ctx).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.camera_alt_rounded, size: 20),
+                      label: const Text('Ambil Foto'),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _processReceiptImage(
+                          context,
+                          ImageSource.camera,
+                          isDark,
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.photo_library_rounded, size: 20),
+                      label: const Text('Pilih Galeri'),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _processReceiptImage(
+                          context,
+                          ImageSource.gallery,
+                          isDark,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Pastikan seluruh struk terlihat jelas & cukup cahaya.',
+                style: Theme.of(
+                  ctx,
+                ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Text(
+                      'atau tempel teks manual',
+                      style: Theme.of(ctx).textTheme.bodySmall,
+                    ),
+                  ),
+                  const Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: textController,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  hintText:
+                      'Contoh:\nINDOMARET KEMANG\n12/09/2026\n2x Susu UHT Rp 14.000\n1x Roti Tawar 15.000\nDiskon Member 2.000\nPPN 11% 2.970\nTotal Rp 29.970\nTunai Rp 50.000',
                 ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
-                  label: const Text('Ekstrak & Periksa'),
-                  onPressed: () {
-                    final raw = textController.text;
-                    if (raw.trim().isEmpty) return;
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Batal'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
+                    label: const Text('Ekstrak & Periksa'),
+                    onPressed: () {
+                      final raw = textController.text;
+                      if (raw.trim().isEmpty) return;
 
-                    final parsed = ReceiptParserService.parse(raw);
-                    Navigator.pop(ctx);
-                    _showReceiptPreviewSheet(context, parsed, isDark);
-                  },
-                ),
-              ],
-            ),
-          ],
+                      final parsed = ReceiptParserService.parse(raw);
+                      Navigator.pop(ctx);
+                      _showReceiptPreviewSheet(context, parsed, isDark);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -876,6 +1068,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       badgeColor = AppColors.expense;
     }
 
+    // Local, editable copy: the user can fix/remove rows here before
+    // "Terapkan Data" uses this list instead of the raw parsed.items.
+    final items = List<ReceiptItem>.from(parsed.items);
+    // Re-validated against the edited item list every time it changes, so
+    // a warning (e.g. "item lebih besar dari total") disappears once the
+    // user actually fixes or removes the offending row.
+    var issues = ReceiptValidationService.validate(
+      parsed.copyWith(items: items),
+    );
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -883,269 +1085,567 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (_, scrollController) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: ListView(
-            controller: scrollController,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Hasil Ekstraksi Struk',
-                          style: Theme.of(ctx).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Verifikasi data sebelum diterapkan ke form',
-                          style: Theme.of(ctx).textTheme.bodySmall,
-                        ),
-                      ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (_, scrollController) => Padding(
+            padding: const EdgeInsets.all(20),
+            child: ListView(
+              controller: scrollController,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Hasil Ekstraksi Struk',
+                            style: Theme.of(ctx).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Verifikasi data sebelum diterapkan ke form',
+                            style: Theme.of(ctx).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: badgeColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          parsed.confidenceScore >= 0.8
-                              ? Icons.verified_rounded
-                              : Icons.info_outline_rounded,
-                          size: 14,
-                          color: badgeColor,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: badgeColor.withValues(alpha: 0.4),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${parsed.confidenceLabel} ($confidencePercent%)',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            parsed.confidenceScore >= 0.8
+                                ? Icons.verified_rounded
+                                : Icons.info_outline_rounded,
+                            size: 14,
                             color: badgeColor,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 4),
+                          Text(
+                            '${parsed.confidenceLabel} ($confidencePercent%)',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: badgeColor,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (issues.isNotEmpty) ...[
+                  ...issues.map((issue) {
+                    final isError = issue.severity == ValidationSeverity.error;
+                    final color = isError ? AppColors.expense : Colors.orange;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            isError
+                                ? Icons.error_outline_rounded
+                                : Icons.warning_amber_rounded,
+                            size: 16,
+                            color: color,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              issue.message,
+                              style: TextStyle(fontSize: 12, color: color),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 8),
                 ],
-              ),
-              const SizedBox(height: 16),
-              const Divider(),
-              const SizedBox(height: 12),
+                const Divider(),
+                const SizedBox(height: 12),
 
-              // Summary Info
-              _buildReceiptRow(
-                ctx,
-                'Merchant / Judul',
-                parsed.merchantName ?? 'Tidak terdeteksi',
-                Icons.storefront_rounded,
-              ),
-              _buildReceiptRow(
-                ctx,
-                'Total Transaksi',
-                CurrencyFormatter.format(parsed.totalAmount ?? 0),
-                Icons.payments_rounded,
-                isHighlight: true,
-              ),
-              if (parsed.subtotalAmount != null)
+                // Summary Info
                 _buildReceiptRow(
                   ctx,
-                  'Subtotal',
-                  CurrencyFormatter.format(parsed.subtotalAmount!),
-                  Icons.receipt_rounded,
+                  'Merchant / Judul',
+                  parsed.merchantName ?? 'Tidak terdeteksi',
+                  Icons.storefront_rounded,
                 ),
-              _buildReceiptRow(
-                ctx,
-                'Tanggal',
-                DateFormatter.fullDate(parsed.date ?? DateTime.now()),
-                Icons.calendar_today_rounded,
-              ),
-              _buildReceiptRow(
-                ctx,
-                'Kategori Disarankan',
-                parsed.suggestedCategory.label,
-                Icons.category_rounded,
-              ),
-              if (parsed.paymentMethod != null)
                 _buildReceiptRow(
                   ctx,
-                  'Metode Pembayaran',
-                  '${parsed.paymentMethod} ${matchedWallet != null ? "→ Cocok dengan ${matchedWallet.name}" : ""}',
-                  Icons.account_balance_wallet_rounded,
+                  'Total Transaksi',
+                  CurrencyFormatter.format(parsed.totalAmount ?? 0),
+                  Icons.payments_rounded,
+                  isHighlight: true,
                 ),
-
-              // Items breakdown
-              if (parsed.items.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'Rincian Item (${parsed.items.length}):',
-                  style: Theme.of(ctx).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppColors.cardAltDark : AppColors.cardAltLight,
-                    borderRadius: BorderRadius.circular(12),
+                if (parsed.subtotalAmount != null)
+                  _buildReceiptRow(
+                    ctx,
+                    'Subtotal',
+                    CurrencyFormatter.format(parsed.subtotalAmount!),
+                    Icons.receipt_rounded,
                   ),
-                  child: Column(
-                    children: parsed.items.map((item) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                item.qty > 1
-                                    ? '${item.name} (${item.qty}x)'
-                                    : item.name,
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                            ),
-                            Text(
-                              CurrencyFormatter.format(item.totalPrice),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
+                _buildReceiptRow(
+                  ctx,
+                  'Tanggal',
+                  parsed.date != null
+                      ? DateFormatter.fullDate(parsed.date!)
+                      : 'Tidak terdeteksi (pakai tanggal hari ini)',
+                  Icons.calendar_today_rounded,
                 ),
-              ],
+                _buildReceiptRow(
+                  ctx,
+                  'Kategori Disarankan',
+                  parsed.suggestedCategory.label,
+                  Icons.category_rounded,
+                ),
+                if (parsed.paymentMethod != null)
+                  _buildReceiptRow(
+                    ctx,
+                    'Metode Pembayaran',
+                    '${parsed.paymentMethod} ${matchedWallet != null ? "→ Cocok dengan ${matchedWallet.name}" : ""}',
+                    Icons.account_balance_wallet_rounded,
+                  ),
 
-              // Taxes and Discounts
-              if (parsed.discounts.isNotEmpty || parsed.taxes.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                if (parsed.discounts.isNotEmpty) ...[
+                // Items breakdown — editable: tap a row to correct it, or
+                // remove it if it isn't actually a purchased item.
+                if (items.isNotEmpty) ...[
+                  const SizedBox(height: 12),
                   Text(
-                    'Diskon & Promo:',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.income),
-                  ),
-                  const SizedBox(height: 4),
-                  ...parsed.discounts.map(
-                    (d) => Text(
-                      '• ${d.name} (-${CurrencyFormatter.format(d.amount)})',
-                      style: TextStyle(fontSize: 12, color: AppColors.income),
+                    'Rincian Item (${items.length}) — ketuk untuk edit:',
+                    style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-                if (parsed.taxes.isNotEmpty) ...[
                   const SizedBox(height: 6),
-                  Text(
-                    'Pajak & Biaya:',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 4),
-                  ...parsed.taxes.map(
-                    (t) => Text(
-                      '• ${t.name} (+${CurrencyFormatter.format(t.amount)})',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 4,
                     ),
-                  ),
-                ],
-              ],
-
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Batal'),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppColors.cardAltDark
+                          : AppColors.cardAltLight,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                      label: const Text('Terapkan Data'),
-                      onPressed: () {
-                        setState(() {
-                          if (parsed.merchantName != null &&
-                              parsed.merchantName!.isNotEmpty) {
-                            _titleController.text = parsed.merchantName!;
-                          }
-                          if (parsed.totalAmount != null &&
-                              parsed.totalAmount! > 0) {
-                            _amountController.text = CurrencyInputService.isFormatted
-                                ? RupiahInputFormatter.formatNumber(
-                                    parsed.totalAmount!,
-                                  )
-                                : parsed.totalAmount!.toStringAsFixed(0);
-                          }
-                          if (parsed.date != null) {
-                            _date = parsed.date!;
-                          }
-                          _type = parsed.suggestedType;
-                          _category = parsed.suggestedCategory;
-                          if (matchedWallet != null) {
-                            _selectedWallet = matchedWallet;
-                          }
-
-                          // Build itemized note
-                          final noteBuffer = StringBuffer();
-                          if (parsed.items.isNotEmpty) {
-                            noteBuffer.writeln('Rincian Belanja:');
-                            for (final itm in parsed.items) {
-                              noteBuffer.writeln('• ${itm.toString()}');
-                            }
-                          }
-                          if (parsed.discounts.isNotEmpty) {
-                            noteBuffer.writeln('\nDiskon:');
-                            for (final d in parsed.discounts) {
-                              noteBuffer.writeln('• ${d.name}');
-                            }
-                          }
-                          if (parsed.taxes.isNotEmpty) {
-                            noteBuffer.writeln('\nPajak & Layanan:');
-                            for (final t in parsed.taxes) {
-                              noteBuffer.writeln('• ${t.name}');
-                            }
-                          }
-
-                          if (noteBuffer.isNotEmpty) {
-                            _noteController.text = noteBuffer.toString().trim();
-                          }
-                        });
-
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Struk berhasil diterapkan: ${parsed.merchantName ?? "Transaksi"} (${CurrencyFormatter.format(parsed.totalAmount ?? 0)})',
+                    child: Column(
+                      children: items.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final item = entry.value;
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () => _showEditReceiptItemSheet(
+                            context,
+                            isDark,
+                            item,
+                            (updated) => setSheetState(() {
+                              items[index] = updated;
+                              issues = ReceiptValidationService.validate(
+                                parsed.copyWith(items: items),
+                              );
+                            }),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
                             ),
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item.qty > 1
+                                            ? '${item.name} (${item.qty}x)'
+                                            : item.name,
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
+                                      if (item.suggestedCategory != null) ...[
+                                        const SizedBox(height: 2),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                (isDark
+                                                        ? AppColors.primaryDark
+                                                        : AppColors
+                                                              .primaryLight)
+                                                    .withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '${item.suggestedCategory!.icon} ${item.suggestedCategory!.label}',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark
+                                                  ? AppColors.primaryDark
+                                                  : AppColors.primaryLight,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  CurrencyFormatter.format(item.totalPrice),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 18,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  color: Colors.grey,
+                                  onPressed: () => setSheetState(() {
+                                    items.removeAt(index);
+                                    issues = ReceiptValidationService.validate(
+                                      parsed.copyWith(items: items),
+                                    );
+                                  }),
+                                ),
+                              ],
                             ),
                           ),
                         );
-                      },
+                      }).toList(),
                     ),
                   ),
                 ],
-              ),
-            ],
+
+                // Taxes and Discounts
+                if (parsed.discounts.isNotEmpty || parsed.taxes.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  if (parsed.discounts.isNotEmpty) ...[
+                    Text(
+                      'Diskon & Promo:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.income,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    ...parsed.discounts.map(
+                      (d) => Text(
+                        '• ${d.name} (-${CurrencyFormatter.format(d.amount)})',
+                        style: TextStyle(fontSize: 12, color: AppColors.income),
+                      ),
+                    ),
+                  ],
+                  if (parsed.taxes.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Pajak & Biaya:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    ...parsed.taxes.map(
+                      (t) => Text(
+                        '• ${t.name} (+${CurrencyFormatter.format(t.amount)})',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ),
+                  ],
+                ],
+
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Batal'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(
+                          Icons.check_circle_outline_rounded,
+                          size: 18,
+                        ),
+                        label: const Text('Terapkan Data'),
+                        onPressed: () {
+                          setState(() {
+                            if (parsed.merchantName != null &&
+                                parsed.merchantName!.isNotEmpty) {
+                              _titleController.text = parsed.merchantName!;
+                            }
+                            if (parsed.totalAmount != null &&
+                                parsed.totalAmount! > 0) {
+                              _amountController.text =
+                                  CurrencyInputService.isFormatted
+                                  ? RupiahInputFormatter.formatNumber(
+                                      parsed.totalAmount!,
+                                    )
+                                  : parsed.totalAmount!.toStringAsFixed(0);
+                            }
+                            if (parsed.date != null) {
+                              _date = parsed.date!;
+                            }
+                            _type = parsed.suggestedType;
+                            _category = parsed.suggestedCategory;
+                            if (matchedWallet != null) {
+                              _selectedWallet = matchedWallet;
+                            }
+
+                            // Build itemized note from the user-edited items
+                            // list, not the raw parser output.
+                            final noteBuffer = StringBuffer();
+                            if (items.isNotEmpty) {
+                              noteBuffer.writeln('Rincian Belanja:');
+                              for (final itm in items) {
+                                noteBuffer.writeln('• ${itm.toString()}');
+                              }
+                            }
+                            if (parsed.discounts.isNotEmpty) {
+                              noteBuffer.writeln('\nDiskon:');
+                              for (final d in parsed.discounts) {
+                                noteBuffer.writeln('• ${d.name}');
+                              }
+                            }
+                            if (parsed.taxes.isNotEmpty) {
+                              noteBuffer.writeln('\nPajak & Layanan:');
+                              for (final t in parsed.taxes) {
+                                noteBuffer.writeln('• ${t.name}');
+                              }
+                            }
+
+                            if (noteBuffer.isNotEmpty) {
+                              _noteController.text = noteBuffer
+                                  .toString()
+                                  .trim();
+                            }
+                          });
+
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Struk berhasil diterapkan: ${parsed.merchantName ?? "Transaksi"} (${CurrencyFormatter.format(parsed.totalAmount ?? 0)})',
+                              ),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Bottom sheet to correct one parsed receipt item (name/qty/price/category)
+  /// or confirm it before it's applied to the transaction note.
+  void _showEditReceiptItemSheet(
+    BuildContext context,
+    bool isDark,
+    ReceiptItem item,
+    void Function(ReceiptItem updated) onSave,
+  ) {
+    final nameController = TextEditingController(text: item.name);
+    final qtyController = TextEditingController(text: item.qty.toString());
+    final priceController = TextEditingController(
+      text: CurrencyInputService.isFormatted
+          ? RupiahInputFormatter.formatNumber(item.totalPrice)
+          : item.totalPrice.toStringAsFixed(0),
+    );
+    TransactionCategory? selectedCategory = item.suggestedCategory;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? AppColors.cardDark : AppColors.cardLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Edit Item', style: Theme.of(ctx).textTheme.titleLarge),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'Nama Barang'),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: qtyController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        decoration: const InputDecoration(labelText: 'Qty'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: priceController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: CurrencyInputService.isFormatted
+                            ? [RupiahInputFormatter()]
+                            : [FilteringTextInputFormatter.digitsOnly],
+                        decoration: const InputDecoration(
+                          labelText: 'Total Harga',
+                          prefixText: 'Rp ',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text('Kategori', style: Theme.of(ctx).textTheme.labelLarge),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: TransactionCategory.values
+                      .where((c) => !c.isIncomeCategory)
+                      .map((cat) {
+                        final selected = cat == selectedCategory;
+                        return GestureDetector(
+                          onTap: () =>
+                              setSheetState(() => selectedCategory = cat),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? AppColors.expense.withValues(alpha: 0.15)
+                                  : (isDark
+                                        ? AppColors.cardDark
+                                        : AppColors.cardAltLight),
+                              borderRadius: BorderRadius.circular(10),
+                              border: selected
+                                  ? Border.all(color: AppColors.expense)
+                                  : null,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  cat.icon,
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  cat.label,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      })
+                      .toList(),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Batal'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          final name = nameController.text.trim();
+                          if (name.isEmpty) return;
+                          final qty = int.tryParse(qtyController.text) ?? 1;
+                          final totalPrice = CurrencyInputService.isFormatted
+                              ? RupiahInputFormatter.parse(priceController.text)
+                              : double.tryParse(priceController.text) ?? 0;
+                          if (totalPrice <= 0) return;
+                          final safeQty = qty < 1 ? 1 : qty;
+                          onSave(
+                            ReceiptItem(
+                              name: name,
+                              qty: safeQty,
+                              unitPrice: safeQty > 1
+                                  ? totalPrice / safeQty
+                                  : totalPrice,
+                              totalPrice: totalPrice,
+                              suggestedCategory: selectedCategory,
+                            ),
+                          );
+                          Navigator.pop(ctx);
+                        },
+                        child: const Text('Simpan'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1163,7 +1663,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: isHighlight ? AppColors.primaryLight : Colors.grey),
+          Icon(
+            icon,
+            size: 16,
+            color: isHighlight ? AppColors.primaryLight : Colors.grey,
+          ),
           const SizedBox(width: 8),
           Text(
             '$label: ',
@@ -1204,12 +1708,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 child: GestureDetector(
                   onLongPress: () => _confirmDeleteTag(context, tag),
                   child: Chip(
-                    label: Text('#$tag', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    label: Text(
+                      '#$tag',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     deleteIcon: const Icon(Icons.close_rounded, size: 16),
                     onDeleted: () => setState(() => _tags.remove(tag)),
-                    backgroundColor: (isDark ? AppColors.primaryDark : AppColors.primaryLight)
-                        .withValues(alpha: 0.2),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    backgroundColor:
+                        (isDark
+                                ? AppColors.primaryDark
+                                : AppColors.primaryLight)
+                            .withValues(alpha: 0.2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               );
@@ -1289,7 +1804,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             style: FilledButton.styleFrom(backgroundColor: AppColors.expense),
             onPressed: () async {
               Navigator.pop(dialogCtx);
-              final tagProvider = Provider.of<TagProvider?>(context, listen: false);
+              final tagProvider = Provider.of<TagProvider?>(
+                context,
+                listen: false,
+              );
               final matchingTag = tagProvider?.tags.firstWhere(
                 (t) => t.name.toLowerCase() == tagName.toLowerCase(),
                 orElse: () => TagModel(name: tagName),
@@ -1298,7 +1816,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 await tagProvider.deleteTag(matchingTag.id);
               }
               setState(() {
-                _tags.removeWhere((t) => t.toLowerCase() == tagName.toLowerCase());
+                _tags.removeWhere(
+                  (t) => t.toLowerCase() == tagName.toLowerCase(),
+                );
               });
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -1316,7 +1836,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   Widget _buildQuickPresetChip(double addAmount, String label, bool isDark) {
     return ActionChip(
       avatar: const Icon(Icons.add_rounded, size: 14),
-      label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+      label: Text(
+        label,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
       backgroundColor: isDark ? AppColors.cardDark : AppColors.cardAltLight,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -1524,7 +2047,13 @@ class _MiniCalcSheetState extends State<_MiniCalcSheet> {
       } else if (val == '=') {
         _evaluate();
       } else if (['+', '-', '×', '÷'].contains(val)) {
-        if (_expression.isNotEmpty && !['+', '-', '×', '÷'].contains(_expression[_expression.length - 1])) {
+        if (_expression.isNotEmpty &&
+            ![
+              '+',
+              '-',
+              '×',
+              '÷',
+            ].contains(_expression[_expression.length - 1])) {
           _expression += val;
           _display = _expression;
         }
@@ -1550,7 +2079,9 @@ class _MiniCalcSheetState extends State<_MiniCalcSheet> {
       final result = _computeExpression(sanitized);
       if (result != null && result >= 0) {
         setState(() {
-          _display = result % 1 == 0 ? result.toInt().toString() : result.toStringAsFixed(2);
+          _display = result % 1 == 0
+              ? result.toInt().toString()
+              : result.toStringAsFixed(2);
           _expression = _display;
         });
       }
@@ -1584,7 +2115,9 @@ class _MiniCalcSheetState extends State<_MiniCalcSheet> {
       if (tokens[i] == '*' || tokens[i] == '/') {
         final op = tokens[i];
         final prev = double.tryParse(stage1.removeLast()) ?? 0;
-        final next = (i + 1 < tokens.length) ? (double.tryParse(tokens[i + 1]) ?? 1) : 1;
+        final next = (i + 1 < tokens.length)
+            ? (double.tryParse(tokens[i + 1]) ?? 1)
+            : 1;
         final res = op == '*' ? (prev * next) : (next != 0 ? prev / next : 0.0);
         stage1.add(res.toString());
         i += 2;
@@ -1600,7 +2133,9 @@ class _MiniCalcSheetState extends State<_MiniCalcSheet> {
     int j = 1;
     while (j < stage1.length) {
       final op = stage1[j];
-      final next = (j + 1 < stage1.length) ? (double.tryParse(stage1[j + 1]) ?? 0) : 0;
+      final next = (j + 1 < stage1.length)
+          ? (double.tryParse(stage1[j + 1]) ?? 0)
+          : 0;
       if (op == '+') result += next;
       if (op == '-') result -= next;
       j += 2;
@@ -1611,7 +2146,9 @@ class _MiniCalcSheetState extends State<_MiniCalcSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accentColor = widget.isDark ? AppColors.primaryDark : AppColors.primaryLight;
+    final accentColor = widget.isDark
+        ? AppColors.primaryDark
+        : AppColors.primaryLight;
 
     return SafeArea(
       child: Padding(
@@ -1626,7 +2163,10 @@ class _MiniCalcSheetState extends State<_MiniCalcSheet> {
                   children: [
                     Icon(Icons.calculate_rounded, color: accentColor),
                     const SizedBox(width: 8),
-                    Text('Kalkulator Cepat', style: theme.textTheme.titleMedium),
+                    Text(
+                      'Kalkulator Cepat',
+                      style: theme.textTheme.titleMedium,
+                    ),
                   ],
                 ),
                 TextButton.icon(
@@ -1647,7 +2187,9 @@ class _MiniCalcSheetState extends State<_MiniCalcSheet> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: widget.isDark ? AppColors.cardAltDark : AppColors.cardAltLight,
+                color: widget.isDark
+                    ? AppColors.cardAltDark
+                    : AppColors.cardAltLight,
                 borderRadius: BorderRadius.circular(16),
               ),
               alignment: Alignment.centerRight,
@@ -1692,8 +2234,10 @@ class _MiniCalcSheetState extends State<_MiniCalcSheet> {
                     color: isOp
                         ? accentColor.withValues(alpha: 0.18)
                         : (isSpecial
-                            ? AppColors.expense.withValues(alpha: 0.12)
-                            : (widget.isDark ? AppColors.cardAltDark : AppColors.surfaceLight)),
+                              ? AppColors.expense.withValues(alpha: 0.12)
+                              : (widget.isDark
+                                    ? AppColors.cardAltDark
+                                    : AppColors.surfaceLight)),
                     borderRadius: BorderRadius.circular(12),
                     child: InkWell(
                       onTap: () => _onPress(key),
@@ -1748,10 +2292,16 @@ class _TaxTipSheetState extends State<_TaxTipSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accentColor = widget.isDark ? AppColors.primaryDark : AppColors.primaryLight;
+    final accentColor = widget.isDark
+        ? AppColors.primaryDark
+        : AppColors.primaryLight;
 
-    final taxAmount = _includeTax ? (widget.baseAmount * (_taxPercent / 100.0)) : 0.0;
-    final serviceAmount = _includeService ? (widget.baseAmount * (_servicePercent / 100.0)) : 0.0;
+    final taxAmount = _includeTax
+        ? (widget.baseAmount * (_taxPercent / 100.0))
+        : 0.0;
+    final serviceAmount = _includeService
+        ? (widget.baseAmount * (_servicePercent / 100.0))
+        : 0.0;
     final finalTotal = widget.baseAmount + taxAmount + serviceAmount;
 
     return SafeArea(
@@ -1765,14 +2315,19 @@ class _TaxTipSheetState extends State<_TaxTipSheet> {
               children: [
                 Icon(Icons.percent_rounded, color: accentColor),
                 const SizedBox(width: 8),
-                Text('Kalkulator Pajak & Layanan', style: theme.textTheme.titleMedium),
+                Text(
+                  'Kalkulator Pajak & Layanan',
+                  style: theme.textTheme.titleMedium,
+                ),
               ],
             ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: widget.isDark ? AppColors.cardAltDark : AppColors.surfaceLight,
+                color: widget.isDark
+                    ? AppColors.cardAltDark
+                    : AppColors.surfaceLight,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Column(
@@ -1795,7 +2350,10 @@ class _TaxTipSheetState extends State<_TaxTipSheet> {
                         Text('PPN (${_taxPercent.toInt()}%):'),
                         Text(
                           '+ ${CurrencyFormatter.format(taxAmount)}',
-                          style: const TextStyle(color: AppColors.expense, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            color: AppColors.expense,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -1808,7 +2366,10 @@ class _TaxTipSheetState extends State<_TaxTipSheet> {
                         Text('Service Charge (${_servicePercent.toInt()}%):'),
                         Text(
                           '+ ${CurrencyFormatter.format(serviceAmount)}',
-                          style: const TextStyle(color: AppColors.expense, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            color: AppColors.expense,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -1817,7 +2378,10 @@ class _TaxTipSheetState extends State<_TaxTipSheet> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Total Akhir:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text(
+                        'Total Akhir:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       Text(
                         CurrencyFormatter.format(finalTotal),
                         style: TextStyle(
@@ -1867,7 +2431,8 @@ class _TaxTipSheetState extends State<_TaxTipSheet> {
                 Checkbox(
                   value: _includeService,
                   activeColor: accentColor,
-                  onChanged: (v) => setState(() => _includeService = v ?? false),
+                  onChanged: (v) =>
+                      setState(() => _includeService = v ?? false),
                 ),
                 const Text('Layanan: '),
                 Wrap(
@@ -1910,4 +2475,3 @@ class _TaxTipSheetState extends State<_TaxTipSheet> {
     );
   }
 }
-

@@ -5,9 +5,11 @@ import '../providers/transaction_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../providers/debt_provider.dart';
 import '../providers/recurring_provider.dart';
+import '../providers/custom_category_provider.dart';
 import '../services/financial_health_service.dart';
 import '../services/cashflow_forecast_service.dart';
 import '../utils/formatters.dart';
+import '../widgets/common_widgets.dart';
 
 class FinancialHealthScreen extends StatefulWidget {
   const FinancialHealthScreen({super.key});
@@ -25,6 +27,7 @@ class _FinancialHealthScreenState extends State<FinancialHealthScreen> {
     final walletProvider = Provider.of<WalletProvider?>(context);
     final debtProvider = Provider.of<DebtProvider?>(context);
     final recurringProvider = Provider.of<RecurringProvider?>(context);
+    final customCatProvider = Provider.of<CustomCategoryProvider?>(context);
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -33,6 +36,7 @@ class _FinancialHealthScreenState extends State<FinancialHealthScreen> {
     final transactions = txProvider.transactions;
     final debts = debtProvider?.debts ?? [];
     final recurrings = recurringProvider?.activeRecurrings ?? [];
+    final customCategories = customCatProvider?.categories ?? [];
 
     final health = FinancialHealthService.evaluate(
       transactions: transactions,
@@ -40,6 +44,7 @@ class _FinancialHealthScreenState extends State<FinancialHealthScreen> {
       debts: debts,
       monthlyIncome: txProvider.totalIncome,
       monthlyExpense: txProvider.totalExpense,
+      customCategories: customCategories,
     );
 
     final avgDailyExpense =
@@ -60,6 +65,8 @@ class _FinancialHealthScreenState extends State<FinancialHealthScreen> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          const MonthSelector(),
+          const SizedBox(height: 16),
           // ── Health Score Card ─────────────────────────────────
           Container(
             padding: const EdgeInsets.all(24),

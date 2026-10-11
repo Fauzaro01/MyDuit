@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../config/app_theme.dart';
 import '../models/custom_category_model.dart';
 import '../providers/custom_category_provider.dart';
+import '../services/database_service.dart';
 import '../widgets/emoji_picker_sheet.dart';
 
 class CustomCategoriesScreen extends StatelessWidget {
@@ -131,6 +132,8 @@ class CustomCategoriesScreen extends StatelessWidget {
     );
     bool isIncome = existing?.isIncome ?? false;
     int colorValue = existing?.colorValue ?? 0xFF0D9373;
+    CategoryBucket selectedBucket =
+        existing?.bucket ?? CategoryBucket.needs;
 
     final emojis = [
       '🏠',
@@ -283,6 +286,41 @@ class CustomCategoriesScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
 
+                    // 50/30/20 Bucket allocation (Only for expense)
+                    if (!isIncome) ...[
+                      Text(
+                        'Alokasi 50/30/20 (Kesehatan Finansial)',
+                        style: Theme.of(ctx).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<CategoryBucket>(
+                        value: selectedBucket,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        items: CategoryBucket.values.map((bucket) {
+                          return DropdownMenuItem(
+                            value: bucket,
+                            child: Text(
+                              bucket.label,
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) setState(() => selectedBucket = val);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
                     // Emoji picker
                     Text('Ikon', style: Theme.of(ctx).textTheme.labelLarge),
                     const SizedBox(height: 8),
@@ -398,6 +436,7 @@ class CustomCategoriesScreen extends StatelessWidget {
                             emoji: emojiController.text,
                             isIncome: isIncome,
                             colorValue: colorValue,
+                            bucket: !isIncome ? selectedBucket : null,
                           );
                           if (existing != null) {
                             provider.updateCategory(category);
@@ -445,22 +484,46 @@ class _CategoryTile extends StatelessWidget {
         child: const Icon(Icons.delete_rounded, color: Colors.white),
       ),
       confirmDismiss: (_) async {
+        final usage =
+            await DatabaseService().getCustomCategoryUsage(category.id);
+        if (!context.mounted) return false;
         return await showDialog<bool>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Hapus Kategori?'),
-            content: Text('Hapus "${category.name}"?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Batal'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Hapus'),
-              ),
-            ],
-          ),
+          builder: (ctx) {
+            String message = 'Hapus "${category.name}"?';
+            if (usage.totalUsage > 0) {
+              final parts = <String>[];
+              if (usage.transactionCount > 0) {
+                parts.add('${usage.transactionCount} transaksi');
+              }
+              if (usage.budgetCount > 0) {
+                parts.add('${usage.budgetCount} anggaran');
+              }
+              if (usage.recurringCount > 0) {
+                parts.add('${usage.recurringCount} transaksi berulang');
+              }
+              message =
+                  'Kategori "${category.name}" terhubung dengan ${parts.join(', ')}.\n\n'
+                  'Menghapus kategori akan melepaskan label dari transaksi tanpa menghapus data transaksi Anda. Lanjutkan?';
+            }
+            return AlertDialog(
+              title: const Text('Hapus Kategori?'),
+              content: Text(message),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Batal'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.expense,
+                  ),
+                  child: const Text('Hapus'),
+                ),
+              ],
+            );
+          },
         );
       },
       onDismissed: (_) {
@@ -496,7 +559,11 @@ class _CategoryTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    category.isIncome ? 'Pemasukan' : 'Pengeluaran',
+                    category.isIncome
+                        ? 'Pemasukan'
+                        : (category.bucket != null
+                            ? 'Pengeluaran • ${category.bucket!.label.split(' ').first}'
+                            : 'Pengeluaran'),
                     style: TextStyle(
                       fontSize: 12,
                       color: category.isIncome
