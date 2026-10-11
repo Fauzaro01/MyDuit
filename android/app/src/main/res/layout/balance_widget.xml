@@ -5,24 +5,38 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center_vertical"
-    android:background="#0D9373"
-    android:padding="16dp">
+    android:background="@drawable/widget_background"
+    android:paddingHorizontal="20dp"
+    android:paddingVertical="16dp">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="MyDuit"
+        android:text="@string/widget_balance_label"
         android:textColor="#CCFFFFFF"
-        android:textSize="12sp" />
+        android:textSize="13sp"
+        android:fontFamily="sans-serif-medium" />
 
     <TextView
         android:id="@+id/widget_balance"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="Rp 0"
+        android:layout_marginTop="6dp"
+        android:text="@string/widget_balance_placeholder"
         android:textColor="#FFFFFFFF"
-        android:textSize="20sp"
-        android:textStyle="bold" />
+        android:textSize="26sp"
+        android:textStyle="bold"
+        android:fontFamily="sans-serif-black"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="@string/widget_app_label"
+        android:textColor="#99FFFFFF"
+        android:textSize="11sp"
+        android:fontFamily="sans-serif-medium" />
 
 </LinearLayout>
