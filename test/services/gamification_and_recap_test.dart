@@ -141,7 +141,62 @@ void main() {
       expect(recap.savingsRate, 70.0);
       expect(recap.topExpenseCategory, 'Makanan');
       expect(recap.mostExpensiveDayOfMonth, 5);
+      expect(recap.mostFrugalDayOfMonth, isNotNull);
       expect(recap.personalityTitle, 'Sang Master Penabung');
+    });
+
+    test('generateRecap evaluates budget adherence and goals', () {
+      final txs = [
+        TransactionModel(
+          title: 'Makan',
+          amount: 500000,
+          type: TransactionType.expense,
+          category: TransactionCategory.food,
+          date: DateTime(2026, 9, 2),
+          walletId: 'w1',
+        ),
+      ];
+      final budgets = [
+        BudgetModel(
+          category: TransactionCategory.food,
+          monthlyLimit: 1000000,
+          year: 2026,
+          month: 9,
+        ),
+        BudgetModel(
+          category: TransactionCategory.shopping,
+          monthlyLimit: 200000,
+          year: 2026,
+          month: 9,
+        ),
+      ];
+      final goals = [
+        SavingsGoalModel(
+          title: 'Laptop Baru',
+          targetAmount: 15000000,
+          currentAmount: 15000000,
+          isCompleted: true,
+        ),
+        SavingsGoalModel(
+          title: 'Liburan',
+          targetAmount: 5000000,
+          currentAmount: 1000000,
+          isCompleted: false,
+        ),
+      ];
+
+      final recap = MonthlyRecapService.generateRecap(
+        year: 2026,
+        month: 9,
+        allTransactions: txs,
+        budgets: budgets,
+        goals: goals,
+      );
+
+      expect(recap.totalBudgetsCount, 2);
+      expect(recap.budgetsKeptCount, 2);
+      expect(recap.completedGoalsCount, 1);
+      expect(recap.activeGoalsCount, 1);
     });
   });
 }

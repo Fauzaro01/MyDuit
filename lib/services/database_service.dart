@@ -38,7 +38,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 11,
+      version: 12,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -198,7 +198,8 @@ class DatabaseService {
         emoji TEXT NOT NULL DEFAULT '📌',
         isIncome INTEGER NOT NULL DEFAULT 0,
         colorValue INTEGER NOT NULL DEFAULT 855405427,
-        createdAt INTEGER NOT NULL
+        createdAt INTEGER NOT NULL,
+        bucket TEXT
       )
     ''');
   }
@@ -395,6 +396,11 @@ class DatabaseService {
     }
     if (oldVersion < 11) {
       await _createV11Tables(db);
+    }
+    if (oldVersion < 12) {
+      try {
+        await db.execute('ALTER TABLE custom_categories ADD COLUMN bucket TEXT');
+      } catch (_) {}
     }
   }
 
@@ -1256,9 +1262,52 @@ class DatabaseService {
     );
   }
 
+  Future<CustomCategoryUsage> getCustomCategoryUsage(String id) async {
+    final db = await database;
+    final txCount = Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT COUNT(*) FROM transactions WHERE customCategoryId = ?',
+          [id],
+        )) ??
+        0;
+    final budgetCount = Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT COUNT(*) FROM budgets WHERE customCategoryId = ?',
+          [id],
+        )) ??
+        0;
+    final recCount = Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT COUNT(*) FROM recurring_transactions WHERE customCategoryId = ?',
+          [id],
+        )) ??
+        0;
+    return CustomCategoryUsage(
+      transactionCount: txCount,
+      budgetCount: budgetCount,
+      recurringCount: recCount,
+    );
+  }
+
   Future<void> deleteCustomCategory(String id) async {
     final db = await database;
-    await db.delete('custom_categories', where: 'id = ?', whereArgs: [id]);
+    await db.transaction((txn) async {
+      await txn.update(
+        'transactions',
+        {'customCategoryId': null},
+        where: 'customCategoryId = ?',
+        whereArgs: [id],
+      );
+      await txn.delete(
+        'budgets',
+        where: 'customCategoryId = ?',
+        whereArgs: [id],
+      );
+      await txn.update(
+        'recurring_transactions',
+        {'customCategoryId': null},
+        where: 'customCategoryId = ?',
+        whereArgs: [id],
+      );
+      await txn.delete('custom_categories', where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   Future<List<CustomCategoryModel>> getAllCustomCategories() async {

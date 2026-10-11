@@ -1,5 +1,14 @@
 import 'package:uuid/uuid.dart';
 
+enum CategoryBucket {
+  needs('Kebutuhan (Needs)'),
+  wants('Keinginan (Wants)'),
+  savings('Tabungan / Investasi (Savings)');
+
+  final String label;
+  const CategoryBucket(this.label);
+}
+
 class CustomCategoryModel {
   final String id;
   final String name;
@@ -7,6 +16,7 @@ class CustomCategoryModel {
   final bool isIncome; // true = income, false = expense
   final int colorValue;
   final int createdAt;
+  final CategoryBucket? bucket;
 
   CustomCategoryModel({
     String? id,
@@ -15,6 +25,7 @@ class CustomCategoryModel {
     required this.isIncome,
     this.colorValue = 0xFF0D9373,
     int? createdAt,
+    this.bucket,
   }) : id = id ?? const Uuid().v4(),
        createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch;
 
@@ -26,6 +37,7 @@ class CustomCategoryModel {
       'isIncome': isIncome ? 1 : 0,
       'colorValue': colorValue,
       'createdAt': createdAt,
+      'bucket': bucket?.name,
     };
   }
 
@@ -37,6 +49,11 @@ class CustomCategoryModel {
       isIncome: (map['isIncome'] as int) == 1,
       colorValue: map['colorValue'] as int,
       createdAt: map['createdAt'] as int,
+      bucket: map['bucket'] != null
+          ? CategoryBucket.values
+              .where((b) => b.name == map['bucket'])
+              .firstOrNull
+          : null,
     );
   }
 
@@ -45,6 +62,7 @@ class CustomCategoryModel {
     String? emoji,
     bool? isIncome,
     int? colorValue,
+    CategoryBucket? bucket,
   }) {
     return CustomCategoryModel(
       id: id,
@@ -53,6 +71,22 @@ class CustomCategoryModel {
       isIncome: isIncome ?? this.isIncome,
       colorValue: colorValue ?? this.colorValue,
       createdAt: createdAt,
+      bucket: bucket ?? this.bucket,
     );
   }
 }
+
+class CustomCategoryUsage {
+  final int transactionCount;
+  final int budgetCount;
+  final int recurringCount;
+
+  const CustomCategoryUsage({
+    this.transactionCount = 0,
+    this.budgetCount = 0,
+    this.recurringCount = 0,
+  });
+
+  int get totalUsage => transactionCount + budgetCount + recurringCount;
+}
+

@@ -318,4 +318,31 @@ class NotificationService {
     final notifId = 90000 + (goalId.hashCode % 9999).abs();
     await _plugin.cancel(id: notifId);
   }
+
+  /// Display an immediate notification when a budget threshold is exceeded
+  static Future<void> showBudgetExceededAlert({
+    required String categoryName,
+    required double spent,
+    required double limit,
+  }) async {
+    const androidDetails = AndroidNotificationDetails(
+      'myduit_budget_alerts',
+      'Peringatan Anggaran',
+      channelDescription: 'Pemberitahuan ketika anggaran kategori terlampaui',
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+    );
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(),
+    );
+    final notifId = 80000 + (categoryName.hashCode % 10000).abs();
+    await _plugin.show(
+      id: notifId,
+      title: '🚨 Anggaran $categoryName Terlampaui!',
+      body: 'Pengeluaran telah mencapai ${CurrencyFormatter.format(spent)} dari batas ${CurrencyFormatter.format(limit)}.',
+      notificationDetails: details,
+    );
+  }
 }

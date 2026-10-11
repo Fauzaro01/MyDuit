@@ -9,6 +9,10 @@ class AppLockProvider extends ChangeNotifier {
   static const _lockEnabledKey = 'app_lock_enabled';
   static const _fingerprintEnabledKey = 'fingerprint_enabled';
   static const _lockTimeoutKey = 'app_lock_timeout_seconds';
+  static const _failedAttemptsKey = 'app_lock_failed_attempts';
+  static const _lockoutUntilKey = 'app_lock_lockout_until';
+  static const _securityQuestionKey = 'app_lock_security_question';
+  static const _securityAnswerHashKey = 'app_lock_security_answer_hash';
 
   String? _pin;
   bool _isLockEnabled = false;
@@ -19,11 +23,25 @@ class AppLockProvider extends ChangeNotifier {
   DateTime? _pausedAt;
   bool _isAuthenticating = false;
 
+  int _failedAttempts = 0;
+  DateTime? _lockoutUntil;
+  String? _securityQuestion;
+  String? _securityAnswerHash;
+
   final LocalAuthentication _localAuth = LocalAuthentication();
 
   bool get isLockEnabled => _isLockEnabled;
   bool get isUnlocked => _isUnlocked;
   bool get hasPin => _pin != null && _pin!.isNotEmpty;
+  int get failedAttempts => _failedAttempts;
+  bool get isLockedOut =>
+      _lockoutUntil != null && DateTime.now().isBefore(_lockoutUntil!);
+  int get remainingLockoutSeconds => isLockedOut
+      ? _lockoutUntil!.difference(DateTime.now()).inSeconds + 1
+      : 0;
+  String? get securityQuestion => _securityQuestion;
+  bool get hasSecurityQuestion =>
+      _securityQuestion != null && _securityQuestion!.isNotEmpty;
 
   /// Derives a backup-encryption key from the app-lock PIN, domain-separated
   /// from the PIN's own stored form so the two don't share raw material.
@@ -45,6 +63,16 @@ class AppLockProvider extends ChangeNotifier {
     _isLockEnabled = prefs.getBool(_lockEnabledKey) ?? false;
     _isFingerprintEnabled = prefs.getBool(_fingerprintEnabledKey) ?? false;
     _lockTimeoutSeconds = prefs.getInt(_lockTimeoutKey) ?? 0;
+    _failedAttempts = prefs.getInt(_failedAttemptsKey) ?? 0;
+    final lockoutMillis = prefs.getInt(_lockoutUntilKey);
+    if (lockoutMillis != null) {
+      _lockoutUntil = DateTime.fromMillisecondsSinceEpoch(lockoutMillis);
+      if (DateTime.now().isAfter(_lockoutUntil!)) {
+        _lockoutUntil = null;
+      }
+    }
+    _securityQuestion = prefs.getString(_securityQuestionKey);
+    _securityAnswerHash = prefs.getString(_securityAnswerHashKey);
     _isUnlocked = !_isLockEnabled; // Auto-unlock if lock is disabled
 
     // Check biometric availability
@@ -80,6 +108,9 @@ class AppLockProvider extends ChangeNotifier {
     _pin = newPin;
     _isLockEnabled = true;
     _isUnlocked = true;
+    _failedAttempts = 0;
+    _lockoutUntil = null;
+    await _persistLockoutState();
     notifyListeners();
     return true;
   }
@@ -89,10 +120,18 @@ class AppLockProvider extends ChangeNotifier {
     await prefs.remove(_pinKey);
     await prefs.setBool(_lockEnabledKey, false);
     await prefs.setBool(_fingerprintEnabledKey, false);
+    await prefs.remove(_failedAttemptsKey);
+    await prefs.remove(_lockoutUntilKey);
+    await prefs.remove(_securityQuestionKey);
+    await prefs.remove(_securityAnswerHashKey);
     _pin = null;
     _isLockEnabled = false;
     _isFingerprintEnabled = false;
     _isUnlocked = true;
+    _failedAttempts = 0;
+    _lockoutUntil = null;
+    _securityQuestion = null;
+    _securityAnswerHash = null;
     notifyListeners();
   }
 
@@ -138,6 +177,9 @@ class AppLockProvider extends ChangeNotifier {
         biometricOnly: true,
       );
       if (authenticated) {
+        _failedAttempts = 0;
+        _lockoutUntil = null;
+        await _persistLockoutState();
         _isUnlocked = true;
         notifyListeners();
       }
@@ -152,12 +194,85 @@ class AppLockProvider extends ChangeNotifier {
 
   bool verifyPin(String inputPin) {
     if (_pin == null) return false;
+    if (isLockedOut) return false;
+
     final isCorrect = inputPin == _pin;
     if (isCorrect) {
+      _failedAttempts = 0;
+      _lockoutUntil = null;
+      _persistLockoutState();
       _isUnlocked = true;
       notifyListeners();
+      return true;
+    } else {
+      _failedAttempts++;
+      if (_failedAttempts >= 10) {
+        _lockoutUntil = DateTime.now().add(const Duration(seconds: 300));
+      } else if (_failedAttempts >= 8) {
+        _lockoutUntil = DateTime.now().add(const Duration(seconds: 120));
+      } else if (_failedAttempts >= 5) {
+        _lockoutUntil = DateTime.now().add(const Duration(seconds: 30));
+      }
+      _persistLockoutState();
+      notifyListeners();
+      return false;
     }
-    return isCorrect;
+  }
+
+  Future<void> _persistLockoutState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_failedAttemptsKey, _failedAttempts);
+    if (_lockoutUntil != null) {
+      await prefs.setInt(_lockoutUntilKey, _lockoutUntil!.millisecondsSinceEpoch);
+    } else {
+      await prefs.remove(_lockoutUntilKey);
+    }
+  }
+
+  Future<void> setSecurityQuestion({
+    required String question,
+    required String answer,
+  }) async {
+    final cleanQ = question.trim();
+    final cleanA = answer.trim().toLowerCase();
+    if (cleanQ.isEmpty || cleanA.isEmpty) return;
+
+    final hash = sha256.convert(utf8.encode(cleanA)).toString();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_securityQuestionKey, cleanQ);
+    await prefs.setString(_securityAnswerHashKey, hash);
+    _securityQuestion = cleanQ;
+    _securityAnswerHash = hash;
+    notifyListeners();
+  }
+
+  bool verifySecurityAnswer(String answer) {
+    if (_securityAnswerHash == null) return false;
+    final cleanA = answer.trim().toLowerCase();
+    final hash = sha256.convert(utf8.encode(cleanA)).toString();
+    final matches = hash == _securityAnswerHash;
+    if (matches) {
+      _failedAttempts = 0;
+      _lockoutUntil = null;
+      _persistLockoutState();
+      notifyListeners();
+    }
+    return matches;
+  }
+
+  Future<bool> resetPinWithSecurityAnswer({
+    required String answer,
+    required String newPin,
+  }) async {
+    if (!verifySecurityAnswer(answer)) return false;
+    return await setPin(newPin);
+  }
+
+  void resetLockout() {
+    _failedAttempts = 0;
+    _lockoutUntil = null;
+    _persistLockoutState();
+    notifyListeners();
   }
 
   void lock() {

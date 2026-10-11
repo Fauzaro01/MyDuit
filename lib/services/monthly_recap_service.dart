@@ -21,6 +21,10 @@ class MonthlyRecapData {
   final String personalityTitle; // e.g. "Sang Penghemat Ulung", "Kolektor Belanja", etc.
   final String personalityEmoji;
   final String keyInsightSummary;
+  final int budgetsKeptCount;
+  final int totalBudgetsCount;
+  final int completedGoalsCount;
+  final int activeGoalsCount;
 
   const MonthlyRecapData({
     required this.year,
@@ -41,6 +45,10 @@ class MonthlyRecapData {
     required this.personalityTitle,
     required this.personalityEmoji,
     required this.keyInsightSummary,
+    this.budgetsKeptCount = 0,
+    this.totalBudgetsCount = 0,
+    this.completedGoalsCount = 0,
+    this.activeGoalsCount = 0,
   });
 }
 
@@ -118,6 +126,32 @@ class MonthlyRecapService {
 
     final expenseDiff = prevExpense > 0 ? ((expense - prevExpense) / prevExpense * 100) : 0.0;
 
+    // Budget adherence
+    int budgetsKept = 0;
+    for (final b in budgets) {
+      double spent = 0;
+      for (final tx in currentTx) {
+        if (tx.type == TransactionType.expense) {
+          if (b.customCategoryId != null) {
+            if (tx.customCategoryId == b.customCategoryId) spent += tx.amount;
+          } else {
+            if (tx.category == b.category && tx.customCategoryId == null) {
+              spent += tx.amount;
+            }
+          }
+        }
+      }
+      if (spent <= b.monthlyLimit) {
+        budgetsKept++;
+      }
+    }
+
+    // Savings goals progress
+    final completedGoals = goals
+        .where((g) => g.isCompleted || g.currentAmount >= g.targetAmount)
+        .length;
+    final activeGoals = goals.length - completedGoals;
+
     // Financial personality
     String personaTitle;
     String personaEmoji;
@@ -160,6 +194,10 @@ class MonthlyRecapService {
       personalityTitle: personaTitle,
       personalityEmoji: personaEmoji,
       keyInsightSummary: summary,
+      budgetsKeptCount: budgetsKept,
+      totalBudgetsCount: budgets.length,
+      completedGoalsCount: completedGoals,
+      activeGoalsCount: activeGoals,
     );
   }
 }

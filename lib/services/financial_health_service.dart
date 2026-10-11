@@ -1,6 +1,7 @@
 import '../models/financial_health_model.dart';
 import '../models/transaction_model.dart';
 import '../models/debt_model.dart';
+import '../models/custom_category_model.dart';
 
 class FinancialHealthService {
   /// Evaluates financial health score based on transaction history and current balances
@@ -10,6 +11,7 @@ class FinancialHealthService {
     required List<DebtModel> debts,
     required double monthlyIncome,
     required double monthlyExpense,
+    List<CustomCategoryModel> customCategories = const [],
   }) {
     if (monthlyIncome <= 0 && monthlyExpense <= 0) {
       return const FinancialHealthScore(
@@ -29,21 +31,33 @@ class FinancialHealthService {
     // 1. Calculate 50/30/20 breakdown
     double needsExpense = 0;
     double wantsExpense = 0;
+    final customCategoryMap = {for (final c in customCategories) c.id: c};
 
     for (final tx in transactions) {
       if (tx.type == TransactionType.expense) {
         if (tx.customCategoryId != null) {
-          // Custom category expenses default to needs if title contains essential keywords
-          final lower = tx.title.toLowerCase();
-          if (lower.contains('makan') ||
-              lower.contains('listrik') ||
-              lower.contains('air') ||
-              lower.contains('sewa') ||
-              lower.contains('obat') ||
-              lower.contains('sekolah')) {
-            needsExpense += tx.amount;
+          final customCat = customCategoryMap[tx.customCategoryId];
+          if (customCat != null && customCat.bucket != null) {
+            if (customCat.bucket == CategoryBucket.needs) {
+              needsExpense += tx.amount;
+            } else if (customCat.bucket == CategoryBucket.wants) {
+              wantsExpense += tx.amount;
+            } else {
+              needsExpense += tx.amount;
+            }
           } else {
-            wantsExpense += tx.amount;
+            // Fallback keyword detection
+            final lower = tx.title.toLowerCase();
+            if (lower.contains('makan') ||
+                lower.contains('listrik') ||
+                lower.contains('air') ||
+                lower.contains('sewa') ||
+                lower.contains('obat') ||
+                lower.contains('sekolah')) {
+              needsExpense += tx.amount;
+            } else {
+              wantsExpense += tx.amount;
+            }
           }
         } else if (_isNeedCategory(tx.category)) {
           needsExpense += tx.amount;

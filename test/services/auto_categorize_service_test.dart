@@ -75,5 +75,47 @@ void main() {
       expect(s3!.category, TransactionCategory.salary);
       expect(s3.type, TransactionType.income);
     });
+
+    test(
+      'word-boundary matching avoids false positives inside unrelated words',
+      () {
+        // "tol" (transport) must not match inside an unrelated word that
+        // merely contains that substring.
+        expect(
+          AutoCategorizeService.suggest('Beli pistol mainan anak'),
+          isNull,
+        );
+        // "bus" (transport) must not match inside "busuk" ("rotten").
+        expect(AutoCategorizeService.suggest('Makanan busuk dibuang'), isNull);
+      },
+    );
+
+    test(
+      'longest/most specific matching keyword wins when several are present',
+      () {
+        // "kimia farma" (health, 2-word phrase) should win over any shorter
+        // accidental match once both are present in the same text.
+        final s = AutoCategorizeService.suggest('Beli obat di Kimia Farma');
+        expect(s, isNotNull);
+        expect(s!.category, TransactionCategory.health);
+        expect(s.matchedKeyword, 'kimia farma');
+      },
+    );
+
+    test('exposes the matched keyword for transparency', () {
+      final s = AutoCategorizeService.suggest('Nonton di XXI');
+      expect(s, isNotNull);
+      expect(s!.matchedKeyword, isNotNull);
+    });
+
+    test(
+      'still falls back to null for irrelevant/ambiguous text (no forced category)',
+      () {
+        expect(
+          AutoCategorizeService.suggest('Lorem ipsum dolor sit amet'),
+          isNull,
+        );
+      },
+    );
   });
 }

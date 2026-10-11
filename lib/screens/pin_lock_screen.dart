@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +22,7 @@ class _PinLockScreenState extends State<PinLockScreen>
   bool _isError = false;
   bool _isConfirmStage = false;
   bool _isFingerprintAuthenticating = false;
+  Timer? _lockoutTimer;
 
   late AnimationController _fingerprintPulseController;
   late Animation<double> _fingerprintPulseAnimation;
@@ -45,13 +47,49 @@ class _PinLockScreenState extends State<PinLockScreen>
     // Auto-trigger fingerprint if enabled and not in setup mode
     if (!widget.isSetup) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkInitialLockout();
         _tryFingerprintAuth();
       });
     }
   }
 
+  void _checkInitialLockout() {
+    final provider = context.read<AppLockProvider>();
+    if (provider.isLockedOut) {
+      setState(() {
+        _isError = true;
+        _statusText = 'Terkunci. Tunggu ${provider.remainingLockoutSeconds} detik';
+      });
+      _ensureLockoutTimer();
+    }
+  }
+
+  void _ensureLockoutTimer() {
+    _lockoutTimer?.cancel();
+    _lockoutTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final provider = context.read<AppLockProvider>();
+      if (!provider.isLockedOut) {
+        timer.cancel();
+        setState(() {
+          _isError = false;
+          _statusText = 'Masukkan PIN';
+        });
+      } else {
+        setState(() {
+          _isError = true;
+          _statusText = 'Terkunci. Tunggu ${provider.remainingLockoutSeconds} detik';
+        });
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _lockoutTimer?.cancel();
     _fingerprintPulseController.dispose();
     super.dispose();
   }
@@ -74,6 +112,8 @@ class _PinLockScreenState extends State<PinLockScreen>
   }
 
   void _onDigit(String digit) {
+    final lockProvider = context.read<AppLockProvider>();
+    if (!widget.isSetup && lockProvider.isLockedOut) return;
     if (_pin.length >= 4) return;
     HapticFeedback.lightImpact();
     setState(() {
@@ -95,7 +135,7 @@ class _PinLockScreenState extends State<PinLockScreen>
     });
   }
 
-  void _onPinComplete() {
+  Future<void> _onPinComplete() async {
     if (widget.isSetup) {
       if (!_isConfirmStage) {
         setState(() {
@@ -106,9 +146,15 @@ class _PinLockScreenState extends State<PinLockScreen>
         });
       } else {
         if (_pin == _confirmPin) {
-          context.read<AppLockProvider>().setPin(_pin);
-          Navigator.pop(context, true);
-          _showSnack('PIN berhasil diatur 🔒');
+          final chosenPin = _pin;
+          await context.read<AppLockProvider>().setPin(chosenPin);
+          if (mounted) {
+            await _promptSetupSecurityQuestion(context);
+            if (mounted) {
+              Navigator.pop(context, true);
+              _showSnack('PIN berhasil diatur 🔒');
+            }
+          }
         } else {
           setState(() {
             _pin = '';
@@ -121,15 +167,232 @@ class _PinLockScreenState extends State<PinLockScreen>
       }
     } else {
       final provider = context.read<AppLockProvider>();
+      if (provider.isLockedOut) {
+        setState(() {
+          _pin = '';
+          _isError = true;
+          _statusText = 'Terkunci. Tunggu ${provider.remainingLockoutSeconds} detik';
+        });
+        _ensureLockoutTimer();
+        return;
+      }
+
       if (provider.verifyPin(_pin)) {
+        _lockoutTimer?.cancel();
         Navigator.pop(context, true);
       } else {
         setState(() {
           _pin = '';
           _isError = true;
-          _statusText = 'PIN salah, coba lagi';
+          if (provider.isLockedOut) {
+            _statusText = 'Terkunci. Tunggu ${provider.remainingLockoutSeconds} detik';
+            _ensureLockoutTimer();
+          } else {
+            _statusText = 'PIN salah (percobaan ${provider.failedAttempts})';
+          }
         });
       }
+    }
+  }
+
+  Future<void> _promptSetupSecurityQuestion(BuildContext context) async {
+    final provider = context.read<AppLockProvider>();
+    if (provider.hasSecurityQuestion) return;
+
+    final questions = [
+      'Apa nama hewan peliharaan pertamamu?',
+      'Di kota mana kamu dilahirkan?',
+      'Apa makanan favorit masa kecilmu?',
+      'Apa nama sekolah dasar pertamamu?',
+    ];
+    String selectedQuestion = questions.first;
+    final answerController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Pertanyaan Pemulihan (Opsional)'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Atur pertanyaan keamanan agar kamu dapat memulihkan akses jika lupa PIN.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedQuestion,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Pilih Pertanyaan',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: questions
+                      .map((q) => DropdownMenuItem(
+                            value: q,
+                            child: Text(q, style: const TextStyle(fontSize: 13)),
+                          ))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => selectedQuestion = val);
+                    }
+                  },
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: answerController,
+                  decoration: const InputDecoration(
+                    labelText: 'Jawaban Kamu',
+                    hintText: 'Jawaban pemulihan...',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Lewati'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (answerController.text.trim().isNotEmpty) {
+                  await provider.setSecurityQuestion(
+                    question: selectedQuestion,
+                    answer: answerController.text.trim(),
+                  );
+                }
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Simpan'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onForgotPin(BuildContext context) async {
+    final provider = context.read<AppLockProvider>();
+    if (provider.hasSecurityQuestion) {
+      final answerCtrl = TextEditingController();
+      final newPinCtrl = TextEditingController();
+      bool isAnswerVerified = false;
+
+      await showDialog(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Pemulihan PIN'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!isAnswerVerified) ...[
+                    const Text('Jawab pertanyaan keamanan di bawah ini untuk mengatur ulang PIN:'),
+                    const SizedBox(height: 12),
+                    Text(
+                      provider.securityQuestion!,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: answerCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Jawaban',
+                        hintText: 'Ketik jawabanmu...',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ] else ...[
+                    const Text('Jawaban benar! Masukkan 4 digit PIN baru:'),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: newPinCtrl,
+                      keyboardType: TextInputType.number,
+                      maxLength: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'PIN Baru (4 Digit)',
+                        hintText: '1234',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Batal'),
+              ),
+              if (!isAnswerVerified)
+                ElevatedButton(
+                  onPressed: () {
+                    if (provider.verifySecurityAnswer(answerCtrl.text)) {
+                      setDialogState(() => isAnswerVerified = true);
+                    } else {
+                      _showSnack('Jawaban salah, coba lagi');
+                    }
+                  },
+                  child: const Text('Verifikasi'),
+                )
+              else
+                ElevatedButton(
+                  onPressed: () async {
+                    if (newPinCtrl.text.length == 4) {
+                      await provider.setPin(newPinCtrl.text);
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                        _showSnack('PIN baru berhasil disimpan 🔓');
+                      }
+                    } else {
+                      _showSnack('PIN harus 4 digit angka');
+                    }
+                  },
+                  child: const Text('Simpan PIN Baru'),
+                ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Lupa PIN'),
+          content: Text(
+            provider.isFingerprintEnabled
+                ? 'Pertanyaan keamanan belum diatur. Silakan gunakan sidik jari untuk membuka aplikasi.'
+                : 'Pertanyaan keamanan belum diatur. Untuk keamanan data Anda, silakan hubungi dukungan.',
+          ),
+          actions: [
+            if (provider.isFingerprintEnabled)
+              ElevatedButton.icon(
+                icon: const Icon(Icons.fingerprint_rounded),
+                label: const Text('Gunakan Sidik Jari'),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _tryFingerprintAuth();
+                },
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Tutup'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -216,7 +479,22 @@ class _PinLockScreenState extends State<PinLockScreen>
               accentColor: accentColor,
             ),
 
-            const SizedBox(height: 40),
+            if (!widget.isSetup) ...[
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => _onForgotPin(context),
+                child: Text(
+                  'Lupa PIN?',
+                  style: TextStyle(
+                    color: isDark ? Colors.white70 : Colors.black54,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 24),
           ],
         ),
       ),

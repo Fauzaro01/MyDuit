@@ -5,6 +5,9 @@ import '../providers/transaction_provider.dart';
 import '../providers/debt_provider.dart';
 import '../providers/recurring_provider.dart';
 import '../providers/subscription_provider.dart';
+import '../models/debt_model.dart';
+import '../models/recurring_transaction_model.dart';
+import '../models/transaction_model.dart';
 import '../services/financial_calendar_service.dart';
 import '../utils/formatters.dart';
 import '../widgets/common_widgets.dart';
@@ -326,14 +329,241 @@ class _FinancialCalendarScreenState extends State<FinancialCalendarScreen> {
             ),
           ),
 
-        ...summary.transactions.map((tx) {
-          return TransactionTile(
-            transaction: tx,
-            onTap: () {
-              showTransactionDetail(context, tx);
-            },
-          );
-        }),
+        // Scheduled Obligations (Debts, Subscriptions, Recurrings)
+        if (summary.debtsDue.isNotEmpty ||
+            summary.subscriptionsDue.isNotEmpty ||
+            summary.recurringsDue.isNotEmpty) ...[
+          const Row(
+            children: [
+              Icon(Icons.event_note_rounded, size: 18, color: Colors.blueAccent),
+              SizedBox(width: 6),
+              Text(
+                'Kewajiban & Tagihan Jatuh Tempo',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.blueAccent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...summary.debtsDue.map((debt) {
+            final isIOwe = debt.type == DebtType.iOwe;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.cardDark : AppColors.cardLight,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: (isIOwe ? AppColors.expense : AppColors.income)
+                      .withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: (isIOwe ? AppColors.expense : AppColors.income)
+                          .withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      isIOwe
+                          ? Icons.call_made_rounded
+                          : Icons.call_received_rounded,
+                      color: isIOwe ? AppColors.expense : AppColors.income,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${isIOwe ? "Hutang ke" : "Piutang dari"} ${debt.personName}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          'Jatuh Tempo Hari Ini',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    CurrencyFormatter.format(debt.remainingAmount),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: isIOwe ? AppColors.expense : AppColors.income,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          ...summary.subscriptionsDue.map((sub) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.cardDark : AppColors.cardLight,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.blueAccent.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blueAccent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.subscriptions_rounded,
+                      color: Colors.blueAccent,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          sub.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          'Langganan Bulanan',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    CurrencyFormatter.format(sub.amount),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: AppColors.expense,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          ...summary.recurringsDue.map((rec) {
+            final isInc = rec.type == TransactionType.income;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.cardDark : AppColors.cardLight,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.teal.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.repeat_rounded,
+                      color: Colors.teal,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          rec.title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          'Rutin: ${rec.frequency.label}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '${isInc ? "+" : "-"}${CurrencyFormatter.format(rec.amount)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: isInc ? AppColors.income : AppColors.expense,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 12),
+        ],
+
+        // Transactions list
+        if (summary.transactions.isNotEmpty) ...[
+          if (summary.debtsDue.isNotEmpty ||
+              summary.subscriptionsDue.isNotEmpty ||
+              summary.recurringsDue.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Transaksi Tercatat (${summary.transactions.length})',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ...summary.transactions.map((tx) {
+            return TransactionTile(
+              transaction: tx,
+              onTap: () {
+                showTransactionDetail(context, tx);
+              },
+            );
+          }),
+        ],
       ],
     );
   }
